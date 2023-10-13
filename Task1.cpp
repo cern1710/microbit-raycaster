@@ -13,6 +13,8 @@
 #define P14   1
 #define P15   13
 
+#define NUM_LEDS    8   // number of LEDs
+
 /* GPIO addresses : base (0x50000000) + offset */
 #define GPIO_OUT        0x50000504
 #define GPIO_IN         0x50000510
@@ -23,15 +25,15 @@
 #define GPIOTE_CONFIG   0x40006510
 
 /* GPIOTE config offsets */
-#define EVENT_MODE      1
-#define PSEL_13         (P15 << 8)
-#define FALLING_EDGE    (2 << 16)
+#define EVENT_MODE      1           // bit 0
+#define PSEL_13         (P15 << 8)  // bits 8-11
+#define FALLING_EDGE    (2 << 16)   // bits 16-17
 
 #define GPIO_EVENT_DETECT   1
 #define GPIO_EVENT_CLEAR    0
 
 /* Bit patterns that turns out the required pins for LEDs from 0 to 14 */
-#define LED_BITS        0x82061E    // or 8521246 in dec
+#define LED_BITS        0x82061E    // or 8521246 in decimal
 
 /* Bit shift function */
 #define BIT_SHIFT(pin)  (uint32_t) (1 << pin)
@@ -82,7 +84,7 @@ void setLEDs(uint8_t value)
     volatile uint32_t mask = 0;
 
     /* switch on LED pin mask based on given value */
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < NUM_LEDS; i++) {
         if (value & BIT_SHIFT(i))
             mask |= LED_MASKS[i];
     }
@@ -109,7 +111,7 @@ void knightRider()
         delay(100);
 
         /* check boundary conditions and reverse if needed */
-        if ((position == 7 && direction == 1) ||
+        if ((position == (NUM_LEDS - 1) && direction == 1) ||
                 (position == 0 && direction == -1))
             direction = -direction;
 
