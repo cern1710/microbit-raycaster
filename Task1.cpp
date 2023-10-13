@@ -6,10 +6,14 @@
  */
 #define _DEBUG
 
-/* GPIO addresses : base (0x5000000) + offset */
+/* GPIO addresses : base (0x50000000) + offset */
 #define GPIO_OUT    0x50000504
 #define GPIO_IN     0x50000510
 #define GPIO_DIR    0x50000514
+
+/* GPIOTE addresses: base (0x40000600) + offset */
+#define GPIOTE_IN       0x40006100
+#define GPIOTE_CONFIG   0x40006510
 
 /* Bit patterns that turns out the required pins for LEDs from 0 to 14 */
 #define LED_BITS    0x82061E    // or 8521246 in dec
@@ -112,17 +116,30 @@ void knightRider()
 
 void countClicks()
 {
-    volatile uint32_t *addr = (volatile uint32_t *) 0x5000734;
-    *addr |= 3 << 2 | 3 << 16;
-    int8_t i = 0;
-    uint8_t current_state = 0, last_state = 0;
-    volatile uint32_t *gpio_in = (volatile uint32_t *) GPIO_IN;
+    uint8_t i = 0;
+    volatile uint32_t current_state = 0, last_state = 0;
+
+    volatile uint32_t *events_in = (volatile uint32_t *) GPIOTE_IN;
+
+    /* config GPIOTE */
+    volatile uint32_t *task_config = (volatile uint32_t *) GPIOTE_CONFIG;
+
+    /**
+     * Task configuration
+     * 1  << 0 : event mode
+     * 13 << 8 : set PSEL to 13
+     * 2 << 16 : polarity to falling edge (1 -> 0 when clicked)
+     */
+    *task_config |= 1 | (13 << 8) | (2 << 16);
 
     for (;;) {
-        current_state = GET_BIT_IN_POS(*gpio_in, 13);
+        current_state = *events_in;
 
-        if (current_state == 0 && last_state == 1)
-            setLEDs(++i);
+        if (current_state == 1 && last_state == 0) {
+            i++;
+            setLEDs(i);
+            *events_in = 0;
+        }
 
         // debouncing
         delay(10);
