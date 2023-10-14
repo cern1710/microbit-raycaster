@@ -80,7 +80,8 @@ void switchBitsWithMask(volatile uint32_t mask)
 }
 
 /* Conversion from milliseconds to number of ticks */
-uint32_t msToTicks(float delay_ms) {
+uint32_t msToTicks(float delay_ms)
+{
     float fTIMER = BASE_FREQ_16M / ((float) BIT_SHIFT(PRESCALAR));
     float ticks_per_ms = fTIMER / 1000.0;
 
@@ -142,7 +143,7 @@ void delayUntil(uint32_t next_time)
 /* Delays execution based on arbitrary interval */
 void delay(uint32_t interval)
 {
-    volatile int count = interval * 9000; // 9000 is a rough number
+    int count = interval * 9000; // 9000 is a rough number
 
     while (count--);
 }
@@ -157,7 +158,7 @@ void turnOn()
 void setLEDs(uint8_t value)
 {
     uint8_t i;
-    volatile uint32_t mask = 0;
+    uint32_t mask = 0;
 
     /* Switch on LED pin mask based on given value */
     for (i = 0; i < NUM_LEDS; i++) {
