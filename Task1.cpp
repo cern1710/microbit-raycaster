@@ -117,19 +117,7 @@ uint32_t getTime()
  * Uses the timer module to delay execution until timer counter == next_time
  * This control mechanism is status driven, and uses the microcontroller to
  * poll for information. This prevents cumulative drift, and the loop will
- * delay on average for "Interval" milliseconds (defined below).
- *
- * Pseudocode for delayUntil()'s usage (uses Ada-like syntax for clarity):
- *
- * begin:
- *   Next_Time := getTime() + Interval;
- *   loop:
- *      Action;
- *      delayUntil(Next_Time);
- *      Next_Time := Next_Time + Interval;
- *   end loop;
- *
- * Note: Replace 'Action' with the actual operation you intend to perform.
+ * delay on average for "Interval" milliseconds.
  */
 void delayUntil(uint32_t next_time)
 {
