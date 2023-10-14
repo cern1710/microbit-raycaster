@@ -26,9 +26,9 @@
 #define GPIOTE_CONFIG   0x40006510
 
 /* GPIOTE configuration offsets */
-#define EVENT_MODE      1           // bit 0
-#define PSEL_13         (P15 << 8)  // bits 8-11
-#define FALLING_EDGE    (2 << 16)   // bits 16-17
+#define EVENT_MODE      1
+#define PSEL_13         (P15 << 8)
+#define FALLING_EDGE    (2 << 16)
 
 #define GPIO_EVENT_DETECT   1
 #define GPIO_EVENT_CLEAR    0
@@ -42,7 +42,7 @@
 #define TIMER_COMPARE_REGISTER  0x40008540
 
 /* Timer configuration offsets */
-#define BIT_MODE    3   // 32-bits
+#define BIT_MODE    3
 #define PRESCALAR   8
 
 /* Values used for milliseconds to ticks conversion */
@@ -81,7 +81,7 @@ void switchBitsWithMask(volatile uint32_t mask)
 
 /* Conversion from milliseconds to number of ticks */
 uint32_t msToTicks(float delay_ms) {
-    float fTIMER = BASE_FREQ_16M / powf(2.0, (float)PRESCALAR);
+    float fTIMER = BASE_FREQ_16M / ((float) BIT_SHIFT(PRESCALAR));
     float ticks_per_ms = fTIMER / 1000.0;
 
     return (uint32_t)(ticks_per_ms * delay_ms);
@@ -142,7 +142,7 @@ void delayUntil(uint32_t next_time)
 /* Delays execution based on arbitrary interval */
 void delay(uint32_t interval)
 {
-    volatile int count = interval * 9000; // Rough number
+    volatile int count = interval * 9000; // 9000 is a rough number
 
     while (count--);
 }
@@ -175,7 +175,7 @@ void rollingCounter()
 
     startTimer();
     next_time = getTime() + interval;
-    for(;;) {
+    for (;;) {
         setLEDs(i++);
         delayUntil(next_time);
         next_time += interval;
