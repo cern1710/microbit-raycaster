@@ -49,7 +49,7 @@
 #define BASE_FREQ_16M   16000000.0
 
 /* Bit patterns that turns out the required pins for LEDs from 0 to 14 */
-#define LED_BITS        0x82061E    // Or 8521246 in decimal
+#define LED_BITS        0x82061E
 
 /* Bit shift function */
 #define BIT_SHIFT(pin)  (uint32_t) (1 << pin)
@@ -106,7 +106,7 @@ uint32_t getTime()
     volatile uint32_t *capture = (volatile uint32_t *) TIMER_CAPTURE;
 
     *capture = 1;
-    *capture = 0;   // stops repeated captures
+    *capture = 0;   // Stops repeated captures
 
     return *current_time;
 }
@@ -148,7 +148,7 @@ void delayUntil(uint32_t next_time)
  */
 void delay(uint32_t interval)
 {
-    int count = interval * 9000; // 9000 is a rough number based on experiments
+    int count = interval * 9000;
 
     while (count--);
 }
