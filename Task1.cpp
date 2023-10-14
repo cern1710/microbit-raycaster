@@ -68,13 +68,12 @@ const uint32_t LED_MASKS[] = {
 
 /********************* Helper functions *********************/
 
-/* Switches bits based on mask */
+/* Switches bits based on mask input to GPIO */
 void switchBitsWithMask(volatile uint32_t mask)
 {
     volatile uint32_t *out = (volatile uint32_t *) GPIO_OUT;
     volatile uint32_t *dir = (volatile uint32_t *) GPIO_DIR;
 
-    /* Rewrite out and dir with mask value without OR */
     *out = mask;
     *dir = mask;
 }
@@ -107,7 +106,7 @@ uint32_t getTime()
     volatile uint32_t *capture = (volatile uint32_t *) TIMER_CAPTURE;
 
     *capture = 1;
-    *capture = 0;
+    *capture = 0;   // stops repeated captures
 
     return *current_time;
 }
@@ -117,18 +116,20 @@ uint32_t getTime()
  *
  * Uses the timer module to delay execution until timer counter == next_time
  * This control mechanism is status driven, and uses the microcontroller to
- * poll for information. This prevents cumulative drift and is more precise.
+ * poll for information. This prevents cumulative drift, and the loop will
+ * delay on average for "Interval" milliseconds (defined below).
  *
- * General usage of this function is as follows:
+ * Pseudocode for delayUntil()'s usage (uses Ada-like syntax for clarity):
  *
  * begin:
- *   next_time := getTime() + interval
+ *   Next_Time := getTime() + Interval;
  *   loop:
- *      action;
- *      delay_until(next_time);
- *      next_time := next_time + interval;
+ *      Action;
+ *      delayUntil(Next_Time);
+ *      Next_Time := Next_Time + Interval;
  *   end loop;
- * end;
+ *
+ * Note: Replace 'Action' with the actual operation you intend to perform.
  */
 void delayUntil(uint32_t next_time)
 {
@@ -140,10 +141,14 @@ void delayUntil(uint32_t next_time)
     *events_compare = 0;
 }
 
-/* Delays execution based on arbitrary interval */
+/**
+ * Delays execution based on arbitrary interval
+ *
+ * Note: magic number may need adjustments based on hardware and/or requirements
+ */
 void delay(uint32_t interval)
 {
-    int count = interval * 9000; // 9000 is a rough number
+    int count = interval * 9000; // 9000 is a rough number based on experiments
 
     while (count--);
 }
@@ -170,14 +175,14 @@ void setLEDs(uint8_t value)
 
 void rollingCounter()
 {
-    uint8_t i = 0;
+    uint8_t counter = 0;
     uint32_t next_time;
-    uint32_t interval = msToTicks(117); // (30000 ms) / (256 ops)
+    const uint32_t interval = msToTicks(117); // 117 = 30000 ms / 256 operations
 
     startTimer();
     next_time = getTime() + interval;
     for (;;) {
-        setLEDs(i++);
+        setLEDs(counter++);
         delayUntil(next_time);
         next_time += interval;
     }
@@ -188,7 +193,7 @@ void knightRider()
     int8_t direction = 1;
     uint8_t position = 0;
     uint32_t next_time;
-    uint32_t interval = msToTicks(125);
+    const uint32_t interval = msToTicks(125); // takes approx. 1s to go through 8 LEDs
 
     startTimer();
     next_time = getTime() + interval;
@@ -208,7 +213,7 @@ void knightRider()
 
 void countClicks()
 {
-    uint8_t i = 0;
+    uint8_t num_clicks = 0;
     uint8_t current_state = 0, last_state = 0;
     volatile uint32_t *events_in = (volatile uint32_t *) GPIOTE_IN;
     volatile uint32_t *task_config = (volatile uint32_t *) GPIOTE_CONFIG;
@@ -221,7 +226,7 @@ void countClicks()
 
         if (current_state == GPIO_EVENT_DETECT &&
                 last_state == GPIO_EVENT_CLEAR) {
-            setLEDs(++i);
+            setLEDs(++num_clicks);
             *events_in = GPIO_EVENT_CLEAR; // Clear input after detection
         }
         last_state = current_state;
