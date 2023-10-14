@@ -42,8 +42,8 @@
 #define TIMER_COMPARE_REGISTER  0x40008540
 
 /* Timer configuration offsets */
-#define BIT_MODE    3
-#define PRESCALAR   8
+#define MODE_32_BITS    3
+#define PRESCALAR       8
 
 /* Values used for milliseconds to ticks conversion */
 #define BASE_FREQ_16M   16000000.0
@@ -94,7 +94,7 @@ void startTimer()
     volatile uint32_t *bit_mode = (volatile uint32_t *) TIMER_BIT_MODE;
     volatile uint32_t *prescalar = (volatile uint32_t *) TIMER_PRESCALAR;
 
-    *bit_mode = BIT_MODE;
+    *bit_mode = MODE_32_BITS;
     *prescalar = PRESCALAR;
     *start_timer = 1;
 }
@@ -114,7 +114,7 @@ uint32_t getTime()
 /**
  * Delays execution until timer counter reaches specific absolute time
  *
- * Uses the timer module to delay execution until timer counter == next_time
+ * Uses the timer module to delay execution until timer counter == next_time.
  * This control mechanism is status driven, and uses the microcontroller to
  * poll for information. This prevents cumulative drift, and the loop will
  * delay on average for "Interval" milliseconds.
@@ -132,7 +132,7 @@ void delayUntil(uint32_t next_time)
 /**
  * Delays execution based on arbitrary interval
  *
- * Note: magic number may need adjustments based on hardware and/or requirements
+ * Note: Magic number may need adjustments based on hardware and/or requirements
  */
 void delay(uint32_t interval)
 {
@@ -181,7 +181,7 @@ void knightRider()
     int8_t direction = 1;
     uint8_t position = 0;
     uint32_t next_time;
-    const uint32_t interval = msToTicks(125); // takes approx. 1s to go through 8 LEDs
+    const uint32_t interval = msToTicks(125); // Takes approx. 1s to go through 8 LEDs
 
     startTimer();
     next_time = getTime() + interval;
