@@ -14,6 +14,7 @@
 #define P15   13
 
 #define NUM_LEDS    8
+#define BIT_SHIFT(pin)  (uint32_t) (1 << pin)
 
 /* GPIO addresses : base (0x50000000) + offset */
 #define GPIO_OUT        0x50000504
@@ -48,8 +49,6 @@
 
 /* Bit patterns that turns out the required pins for LEDs from 0 to 14 */
 #define LED_BITS        0x82061E
-
-#define BIT_SHIFT(pin)  (uint32_t) (1 << pin)
 
 /* Constant array storing LED masks */
 const uint32_t LED_MASKS[] = {
