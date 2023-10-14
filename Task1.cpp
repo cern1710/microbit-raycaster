@@ -1,6 +1,5 @@
 #include "Microbit.h"
 
-/* Flags for conditional compilation */
 #define _DEBUG
 
 /* Pin mapping from GPIO to edge connector pins */
@@ -41,17 +40,15 @@
 #define TIMER_PRESCALAR         0x40008510
 #define TIMER_COMPARE_REGISTER  0x40008540
 
+#define BASE_FREQ_16M   16000000.0
+
 /* Timer configuration offsets */
 #define MODE_32_BITS    3
 #define PRESCALAR       8
 
-/* Values used for milliseconds to ticks conversion */
-#define BASE_FREQ_16M   16000000.0
-
 /* Bit patterns that turns out the required pins for LEDs from 0 to 14 */
 #define LED_BITS        0x82061E
 
-/* Bit shift function */
 #define BIT_SHIFT(pin)  (uint32_t) (1 << pin)
 
 /* Constant array storing LED masks */
@@ -87,7 +84,6 @@ uint32_t msToTicks(float delay_ms)
     return (uint32_t)(ticks_per_ms * delay_ms);
 }
 
-/* Starts a 32-bit timer */
 void startTimer()
 {
     volatile uint32_t *start_timer = (volatile uint32_t *) TIMER_START;
@@ -99,8 +95,7 @@ void startTimer()
     *start_timer = 1;
 }
 
-/* Gets the initial time by capturing timer counter */
-uint32_t getTime()
+uint32_t captureTime()
 {
     volatile uint32_t *current_time = (volatile uint32_t *) TIMER_COMPARE_REGISTER;
     volatile uint32_t *capture = (volatile uint32_t *) TIMER_CAPTURE;
@@ -129,13 +124,10 @@ void delayUntil(uint32_t next_time)
     *events_compare = 0;
 }
 
-/**
- * Delays execution based on arbitrary interval
- *
- * Note: Magic number may need adjustments based on hardware and/or requirements
- */
+/* Delays execution based on arbitrary interval */
 void delay(uint32_t interval)
 {
+    /* Note: Magic number may need adjustments based on hardware and/or requirements */
     int count = interval * 9000;
 
     while (count--);
@@ -168,7 +160,7 @@ void rollingCounter()
     const uint32_t interval = msToTicks(117); // 117 = 30000 ms / 256 operations
 
     startTimer();
-    next_time = getTime() + interval;
+    next_time = captureTime() + interval;
     for (;;) {
         setLEDs(counter++);
         delayUntil(next_time);
@@ -184,7 +176,7 @@ void knightRider()
     const uint32_t interval = msToTicks(125); // Takes approx. 1s to go through 8 LEDs
 
     startTimer();
-    next_time = getTime() + interval;
+    next_time = captureTime() + interval;
     for (;;) {
         setLEDs(1 << position);
         delayUntil(next_time);
