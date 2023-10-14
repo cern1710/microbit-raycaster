@@ -65,7 +65,6 @@ const uint32_t LED_MASKS[] = {
 
 /********************* Helper functions *********************/
 
-/* Switches bits based on mask input to GPIO */
 void switchBitsWithMask(volatile uint32_t mask)
 {
     volatile uint32_t *out = (volatile uint32_t *) GPIO_OUT;
@@ -75,8 +74,7 @@ void switchBitsWithMask(volatile uint32_t mask)
     *dir = mask;
 }
 
-/* Conversion from milliseconds to number of ticks */
-uint32_t msToTicks(float delay_ms)
+uint32_t convertMsToTicks(float delay_ms)
 {
     float fTIMER = BASE_FREQ_16M / ((float) BIT_SHIFT(PRESCALAR));
     float ticks_per_ms = fTIMER / 1000.0;
@@ -157,7 +155,7 @@ void rollingCounter()
 {
     uint8_t counter = 0;
     uint32_t next_time;
-    const uint32_t interval = msToTicks(117); // 117 = 30000 ms / 256 operations
+    const uint32_t interval = convertMsToTicks(117); // 117 = 30000 ms / 256 operations
 
     startTimer();
     next_time = captureTime() + interval;
@@ -173,7 +171,7 @@ void knightRider()
     int8_t direction = 1;
     uint8_t position = 0;
     uint32_t next_time;
-    const uint32_t interval = msToTicks(125); // Takes approx. 1s to go through 8 LEDs
+    const uint32_t interval = convertMsToTicks(125); // Takes approx. 1s to go through 8 LEDs
 
     startTimer();
     next_time = captureTime() + interval;
