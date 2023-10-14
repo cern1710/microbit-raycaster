@@ -14,7 +14,7 @@
 #define P14   1
 #define P15   13
 
-#define NUM_LEDS    8   // Number of LEDs
+#define NUM_LEDS    8
 
 /* GPIO addresses : base (0x50000000) + offset */
 #define GPIO_OUT        0x50000504
@@ -42,7 +42,7 @@
 #define TIMER_COMPARE_REGISTER  0x40008540
 
 /* Timer configuration offsets */
-#define BIT_MODE    3
+#define BIT_MODE    3   // 32-bits
 #define PRESCALAR   8
 
 /* Values used for milliseconds to ticks conversion */
@@ -121,7 +121,7 @@ uint32_t getTime()
  * General usage of this function is as follows:
  *
  * begin:
- *   next_time := clock + interval (getInitializedTime() does this)
+ *   next_time := getTime() + interval
  *   loop:
  *      action;
  *      delay_until(next_time);
@@ -175,7 +175,6 @@ void rollingCounter()
 
     startTimer();
     next_time = getTime() + interval;
-
     for(;;) {
         setLEDs(i++);
         delayUntil(next_time);
@@ -187,10 +186,15 @@ void knightRider()
 {
     int8_t direction = 1;
     uint8_t position = 0;
+    uint32_t next_time;
+    uint32_t interval = msToTicks(125);
 
+    startTimer();
+    next_time = getTime() + interval;
     for (;;) {
         setLEDs(1 << position);
-        delay(100);
+        delayUntil(next_time);
+        next_time += interval;
 
         /* Check boundary conditions and reverse if needed */
         if ((position == (NUM_LEDS - 1) && direction == 1) ||
@@ -204,7 +208,7 @@ void knightRider()
 void countClicks()
 {
     uint8_t i = 0;
-    uint32_t current_state = 0, last_state = 0;
+    uint8_t current_state = 0, last_state = 0;
     volatile uint32_t *events_in = (volatile uint32_t *) GPIOTE_IN;
     volatile uint32_t *task_config = (volatile uint32_t *) GPIOTE_CONFIG;
 
@@ -232,8 +236,8 @@ int main()
 {
     // turnOn();
     // setLEDs((uint8_t)TEST_UINT);
-    rollingCounter();
+    // rollingCounter();
     // knightRider();
-    // countClicks();
+    countClicks();
 }
 #endif
