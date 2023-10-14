@@ -2,20 +2,6 @@
 
 #define _DEBUG
 
-/* Pin mapping from GPIO to edge connector pins */
-#define P0    2
-#define P1    3
-#define P2    4
-#define P8    10
-#define P9    9
-#define P11   23
-#define P13   17
-#define P14   1
-#define P15   13
-
-#define NUM_LEDS    8
-#define BIT_SHIFT(pin)  (uint32_t) (1 << pin)
-
 /* GPIO addresses : base (0x50000000) + offset */
 #define GPIO_OUT        0x50000504
 #define GPIO_IN         0x50000510
@@ -47,10 +33,23 @@
 #define MODE_32_BITS    3
 #define PRESCALAR       8
 
+/* Pin mapping from GPIO to edge connector pins */
+#define P0    2
+#define P1    3
+#define P2    4
+#define P8    10
+#define P9    9
+#define P11   23
+#define P13   17
+#define P14   1
+#define P15   13
+
 /* Bit patterns that turns out the required pins for LEDs from 0 to 14 */
 #define LED_BITS        0x82061E
 
-/* Constant array storing LED masks */
+#define NUM_LEDS    8
+#define BIT_SHIFT(pin)  (uint32_t) (1 << pin)
+
 const uint32_t LED_MASKS[] = {
     BIT_SHIFT(P14),
     BIT_SHIFT(P13),
@@ -104,12 +103,10 @@ uint32_t captureTime()
 }
 
 /**
- * Delays execution until timer counter reaches specific absolute time
+ * Delays execution until timer reaches specified absolute time
  *
- * Uses the timer module to delay execution until timer counter == next_time.
- * This control mechanism is status driven, and uses the microcontroller to
- * poll for information. This prevents cumulative drift, and the loop will
- * delay on average for "Interval" milliseconds.
+ * This status driven control mechanism prevents cumulative drift for higher
+ * accuracy, with the loop delaying on average for the specified interval.
  */
 void delayUntil(uint32_t next_time)
 {
