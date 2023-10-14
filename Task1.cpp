@@ -115,8 +115,8 @@ uint32_t getTime()
  * Delays execution until timer counter reaches specific absolute time
  *
  * Uses the timer module to delay execution until timer counter == next_time
- * This prevents cumulative drift and is more precise, but is rather naive
- * without the use of interrupts due to busy waiting.
+ * This control mechanism is status driven, and uses the microcontroller to
+ * poll for information. This prevents cumulative drift and is more precise.
  *
  * General usage of this function is as follows:
  *
