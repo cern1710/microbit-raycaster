@@ -2,6 +2,8 @@
 
 #define _DEBUG
 
+#define MMIO32(addr)    (*(volatile uint32_t *)addr)
+
 /* GPIO addresses : base (0x50000000) + offset */
 #define GPIO_OUT        0x50000504
 #define GPIO_IN         0x50000510
@@ -28,7 +30,7 @@
 #define TIMER_COMPARE_REGISTER  0x40008540
 
 #define BASE_FREQ_16M   16000000.0
-#define MS_PER_SECOND   1000.0
+#define MS_PER_SECOND   1000
 
 /* Timer configuration offsets */
 #define MODE_32_BITS    3
@@ -59,8 +61,6 @@
 #define NUM_LEDS    8
 #define BIT_SHIFT(pin)  (uint32_t) (1 << pin)
 
-#define MMIO32(addr)    (*(volatile uint32_t *)addr)
-
 const uint32_t LED_MASKS[] = {
     BIT_SHIFT(P14),
     BIT_SHIFT(P13),
@@ -82,7 +82,7 @@ void switchBitsWithMask(volatile uint32_t mask)
 
 uint32_t convertMsToTicks(float delay_ms)
 {
-    float fTIMER = BASE_FREQ_16M / ((float) BIT_SHIFT(PRESCALAR));
+    float fTIMER = BASE_FREQ_16M / BIT_SHIFT(PRESCALAR);
     float ticks_per_ms = fTIMER / MS_PER_SECOND;
 
     return (uint32_t)(ticks_per_ms * delay_ms);
@@ -112,6 +112,7 @@ uint32_t captureTime()
 void delayUntil(uint32_t next_time)
 {
     MMIO32(TIMER_COMPARE_REGISTER) = next_time;
+
     while (!(MMIO32(TIMER_EVENT_COMPARE)));
     MMIO32(TIMER_EVENT_COMPARE) = 0;
 }
@@ -128,7 +129,7 @@ void delay(uint32_t delay_ms)
 
 void turnOn()
 {
-    switchBitsWithMask((uint32_t) LED_BITS);
+    switchBitsWithMask(LED_BITS);
 }
 
 void setLEDs(uint8_t value)
