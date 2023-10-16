@@ -173,7 +173,7 @@ void knightRider()
     startTimer();
     next_time = captureTime() + interval;
     for (;;) {
-        setLEDs(1 << position);
+        setLEDs(BIT_SHIFT(position));
 
         /* Check boundary conditions and reverse if needed */
         if ((position == (NUM_LEDS - 1) && direction == 1) ||
