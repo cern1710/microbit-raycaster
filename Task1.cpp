@@ -74,7 +74,7 @@ const uint32_t LED_MASKS[] = {
 
 /********************* Helper functions *********************/
 
-void switchBitsWithMask(volatile uint32_t mask)
+void switchBitsWithMask(uint32_t mask)
 {
     MMIO32(GPIO_OUT) = mask;
     MMIO32(GPIO_DIR) = mask;
