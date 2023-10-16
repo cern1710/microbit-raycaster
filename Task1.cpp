@@ -7,6 +7,9 @@
 #define GPIO_IN         0x50000510
 #define GPIO_DIR        0x50000514
 
+#define GPIO_EVENT_DETECT   1
+#define GPIO_EVENT_CLEAR    0
+
 /* GPIOTE addresses: base (0x40000600) + offset */
 #define GPIOTE_IN       0x40006100
 #define GPIOTE_CONFIG   0x40006510
@@ -15,9 +18,6 @@
 #define EVENT_MODE      1
 #define PSEL_13         (P15 << 8)
 #define FALLING_EDGE    (2 << 16)
-
-#define GPIO_EVENT_DETECT   1
-#define GPIO_EVENT_CLEAR    0
 
 /* Timer addresses: base (0x40008000) + offset*/
 #define TIMER_START             0x40008000
@@ -28,10 +28,18 @@
 #define TIMER_COMPARE_REGISTER  0x40008540
 
 #define BASE_FREQ_16M   16000000.0
+#define MS_PER_SECOND   1000.0
 
 /* Timer configuration offsets */
 #define MODE_32_BITS    3
 #define PRESCALAR       8
+
+/**
+ * Rough approximation of number of loop iterations to approximate 1 ms
+ *
+ * 10666 ~= 64 MHz / (1000 ms/s * (2(ldr) + 1(sub) + 2(str) + 1(cbnz)))
+ */
+#define DELAY_1MS_ITERATIONS    10667
 
 /* Pin mapping from GPIO to edge connector pins */
 #define P0    2
@@ -44,7 +52,7 @@
 #define P14   1
 #define P15   13
 
-/* Bit patterns that turns out the required pins for LEDs from 0 to 14 */
+/* Bit patterns that turns on the required pins for LEDs from 0 to 14 */
 #define LED_BITS        0x82061E
 
 #define NUM_LEDS    8
@@ -75,7 +83,7 @@ void switchBitsWithMask(volatile uint32_t mask)
 uint32_t convertMsToTicks(float delay_ms)
 {
     float fTIMER = BASE_FREQ_16M / ((float) BIT_SHIFT(PRESCALAR));
-    float ticks_per_ms = fTIMER / 1000.0;
+    float ticks_per_ms = fTIMER / MS_PER_SECOND;
 
     return (uint32_t)(ticks_per_ms * delay_ms);
 }
@@ -118,11 +126,10 @@ void delayUntil(uint32_t next_time)
     *events_compare = 0;
 }
 
-/* Delays execution based on arbitrary interval */
-void delay(uint32_t interval)
+/* Software delay by looping for specified interval in milliseconds */
+void delay(uint32_t delay_ms)
 {
-    /* Note: Magic number may need adjustments based on hardware and/or requirements */
-    int count = interval * 9000;
+    volatile int count = delay_ms * DELAY_1MS_ITERATIONS;
 
     while (count--);
 }
@@ -164,17 +171,14 @@ void rollingCounter()
 
 void knightRider()
 {
-    int8_t direction = 1;
-    uint8_t position = 0;
     uint32_t next_time;
+    int8_t direction = 1, position = 0;
     const uint32_t interval = convertMsToTicks(125); // Takes approx. 1s to go through 8 LEDs
 
     startTimer();
     next_time = captureTime() + interval;
     for (;;) {
         setLEDs(1 << position);
-        delayUntil(next_time);
-        next_time += interval;
 
         /* Check boundary conditions and reverse if needed */
         if ((position == (NUM_LEDS - 1) && direction == 1) ||
@@ -182,13 +186,15 @@ void knightRider()
             direction = -direction;
 
         position += direction;
+
+        delayUntil(next_time);
+        next_time += interval;
     }
 }
 
 void countClicks()
 {
-    uint8_t num_clicks = 0;
-    uint8_t current_state = 0, last_state = 0;
+    uint8_t num_clicks = 0, current_state = 0, last_state = 0;
     volatile uint32_t *events_in = (volatile uint32_t *) GPIOTE_IN;
     volatile uint32_t *task_config = (volatile uint32_t *) GPIOTE_CONFIG;
 
@@ -216,8 +222,8 @@ int main()
 {
     // turnOn();
     // setLEDs((uint8_t)TEST_UINT);
-    // rollingCounter();
+    rollingCounter();
     // knightRider();
-    countClicks();
+    // countClicks();
 }
 #endif
