@@ -104,10 +104,10 @@ uint32_t captureTime()
 }
 
 /**
- * Hardware-based delay that iterates until timer reaches specified absolute time
+ * Hardware-based delay waits until timer reaches specified absolute time.
  *
- * This status driven control mechanism prevents cumulative drift for higher
- * accuracy, with the loop delaying on average for the specified interval.
+ * This status-driven control mechanism ensures higher accuracy by preventing
+ * cumulative drift. The system pauses, on average, for the provided interval.
  */
 void delayUntil(uint32_t next_time)
 {
@@ -118,10 +118,10 @@ void delayUntil(uint32_t next_time)
 }
 
 /**
- * Software delay that iterates for a specified interval in milliseconds
+ * Software delay that pauses execution for a given interval in milliseconds.
  *
- * Relative delay function using a simple busy-wait loop; this delays
- * for at least the specified interval due to local and cumulative drift.
+ * Utilizes a simple busy-wait loop. Due to local and cumulative drifts, the
+ * actual (software) delay might be slightly longer than the specified interval.
  */
 void delay(uint32_t delay_ms)
 {
