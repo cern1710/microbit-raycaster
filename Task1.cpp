@@ -39,7 +39,7 @@
 /**
  * Rough approximation of number of loop iterations to approximate 1 ms.
  *
- * 10666 ~= 64 MHz / (1000 ms/s * (2(ldr) + 1(sub) + 2(str) + 1(cbnz)))
+ * 10667 ~= 64 MHz / (1000 ms/s * (2(ldr) + 1(sub) + 2(str) + 1(cbnz)))
  * Source: https://www.cse.scu.edu/~dlewis/book3/docs/ARM_Cortex-M4F_Instruction_Summary.pdf
  */
 #define DELAY_1MS_ITERATIONS    10667
