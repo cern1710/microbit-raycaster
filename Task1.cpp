@@ -38,6 +38,7 @@
  * Rough approximation of number of loop iterations to approximate 1 ms
  *
  * 10666 ~= 64 MHz / (1000 ms/s * (2(ldr) + 1(sub) + 2(str) + 1(cbnz)))
+ * Source: https://developer.arm.com/documentation/ddi0439/b/Programmers-Model/Instruction-set-summary/Cortex-M4-instructions
  */
 #define DELAY_1MS_ITERATIONS    10667
 
