@@ -184,7 +184,8 @@ void knightRider()
 
 void countClicks()
 {
-    uint8_t num_clicks = 0, current_state = 0, last_state = 0;
+    uint8_t num_clicks = 0;
+    uint8_t current_state = 0, last_state = 0;
 
     /* Configure the task for falling edge detection on P13 */
     MMIO32(GPIOTE_CONFIG) |= EVENT_MODE | PSEL_13 | FALLING_EDGE;
