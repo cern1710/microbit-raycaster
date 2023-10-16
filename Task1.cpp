@@ -59,6 +59,8 @@
 #define NUM_LEDS    8
 #define BIT_SHIFT(pin)  (uint32_t) (1 << pin)
 
+#define MMIO32(addr)    (*(volatile uint32_t *)addr)
+
 const uint32_t LED_MASKS[] = {
     BIT_SHIFT(P14),
     BIT_SHIFT(P13),
@@ -74,11 +76,8 @@ const uint32_t LED_MASKS[] = {
 
 void switchBitsWithMask(volatile uint32_t mask)
 {
-    volatile uint32_t *out = (volatile uint32_t *) GPIO_OUT;
-    volatile uint32_t *dir = (volatile uint32_t *) GPIO_DIR;
-
-    *out = mask;
-    *dir = mask;
+    MMIO32(GPIO_OUT) = mask;
+    MMIO32(GPIO_DIR) = mask;
 }
 
 uint32_t convertMsToTicks(float delay_ms)
@@ -91,24 +90,17 @@ uint32_t convertMsToTicks(float delay_ms)
 
 void startTimer()
 {
-    volatile uint32_t *start_timer = (volatile uint32_t *) TIMER_START;
-    volatile uint32_t *bit_mode = (volatile uint32_t *) TIMER_BIT_MODE;
-    volatile uint32_t *prescalar = (volatile uint32_t *) TIMER_PRESCALAR;
-
-    *bit_mode = MODE_32_BITS;
-    *prescalar = PRESCALAR;
-    *start_timer = 1;
+    MMIO32(TIMER_BIT_MODE) = MODE_32_BITS;
+    MMIO32(TIMER_PRESCALAR) = PRESCALAR;
+    MMIO32(TIMER_START) = 1;
 }
 
 uint32_t captureTime()
 {
-    volatile uint32_t *current_time = (volatile uint32_t *) TIMER_COMPARE_REGISTER;
-    volatile uint32_t *capture = (volatile uint32_t *) TIMER_CAPTURE;
+    MMIO32(TIMER_CAPTURE) = 1;
+    MMIO32(TIMER_CAPTURE) = 0;   // Stops repeated captures
 
-    *capture = 1;
-    *capture = 0;   // Stops repeated captures
-
-    return *current_time;
+    return MMIO32(TIMER_COMPARE_REGISTER);
 }
 
 /**
@@ -119,12 +111,9 @@ uint32_t captureTime()
  */
 void delayUntil(uint32_t next_time)
 {
-    volatile uint32_t *compare_register = (volatile uint32_t *) TIMER_COMPARE_REGISTER;
-    volatile uint32_t *events_compare = (volatile uint32_t *) TIMER_EVENT_COMPARE;
-
-    *compare_register = next_time;
-    while (!(*events_compare));
-    *events_compare = 0;
+    MMIO32(TIMER_COMPARE_REGISTER) = next_time;
+    while (!(MMIO32(TIMER_EVENT_COMPARE)));
+    MMIO32(TIMER_EVENT_COMPARE) = 0;
 }
 
 /* Software delay by looping for specified interval in milliseconds */
@@ -196,19 +185,17 @@ void knightRider()
 void countClicks()
 {
     uint8_t num_clicks = 0, current_state = 0, last_state = 0;
-    volatile uint32_t *events_in = (volatile uint32_t *) GPIOTE_IN;
-    volatile uint32_t *task_config = (volatile uint32_t *) GPIOTE_CONFIG;
 
     /* Configure the task for falling edge detection on P13 */
-    *task_config |= EVENT_MODE | PSEL_13 | FALLING_EDGE;
+    MMIO32(GPIOTE_CONFIG) |= EVENT_MODE | PSEL_13 | FALLING_EDGE;
 
     for (;;) {
-        current_state = *events_in;
+        current_state = MMIO32(GPIOTE_IN);
 
         if (current_state == GPIO_EVENT_DETECT &&
                 last_state == GPIO_EVENT_CLEAR) {
             setLEDs(++num_clicks);
-            *events_in = GPIO_EVENT_CLEAR; // Clear input after detection
+            MMIO32(GPIOTE_IN) = GPIO_EVENT_CLEAR; // Clear input after detection
         }
         last_state = current_state;
 
