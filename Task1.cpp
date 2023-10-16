@@ -144,7 +144,7 @@ void setLEDs(uint8_t value)
 
     /* Switch on LED pin mask based on given value */
     for (i = 0; i < NUM_LEDS; i++)
-            mask |= (value & BIT_SHIFT(i)) ? LED_MASKS[i] : 0;
+        mask |= (value & BIT_SHIFT(i)) ? LED_MASKS[i] : 0;
 
     switchBitsWithMask(mask);
 }
