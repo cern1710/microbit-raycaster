@@ -193,7 +193,7 @@ void countClicks()
     uint8_t current_state = 0, last_state = 0;
 
     /* Configure the task for falling edge detection on P13 */
-    MMIO32(GPIOTE_CONFIG) |= EVENT_MODE | PSEL_13 | FALLING_EDGE;
+    MMIO32(GPIOTE_CONFIG) = EVENT_MODE | PSEL_13 | FALLING_EDGE;
 
     for (;;) {
         current_state = MMIO32(GPIOTE_IN);
