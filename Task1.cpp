@@ -143,10 +143,9 @@ void setLEDs(uint8_t value)
     uint32_t mask = 0;
 
     /* Switch on LED pin mask based on given value */
-    for (i = 0; i < NUM_LEDS; i++) {
-        if (value & BIT_SHIFT(i))
-            mask |= LED_MASKS[i];
-    }
+    for (i = 0; i < NUM_LEDS; i++)
+            mask |= (value & BIT_SHIFT(i)) ? LED_MASKS[i] : 0;
+
     switchBitsWithMask(mask);
 }
 
@@ -154,7 +153,7 @@ void rollingCounter()
 {
     uint8_t counter = 0;
     uint32_t next_time;
-    const uint32_t interval = convertMsToTicks(117); // 117 = 30000 ms / 256 operations
+    const uint32_t interval = convertMsToTicks(117); // 30000 ms / 256 ops
 
     startTimer();
     next_time = captureTime() + interval;
@@ -169,7 +168,7 @@ void knightRider()
 {
     uint32_t next_time;
     int8_t direction = 1, position = 0;
-    const uint32_t interval = convertMsToTicks(125); // Takes approx. 1s to go through 8 LEDs
+    const uint32_t interval = convertMsToTicks(125); // approx. 1s for 1 full scroll
 
     startTimer();
     next_time = captureTime() + interval;
