@@ -37,7 +37,7 @@
 #define PRESCALAR       8
 
 /**
- * Rough approximation of number of loop iterations to approximate 1 ms
+ * Rough approximation of number of loop iterations to approximate 1 ms.
  *
  * 10666 ~= 64 MHz / (1000 ms/s * (2(ldr) + 1(sub) + 2(str) + 1(cbnz)))
  * Source: https://www.cse.scu.edu/~dlewis/book3/docs/ARM_Cortex-M4F_Instruction_Summary.pdf
@@ -104,7 +104,7 @@ uint32_t captureTime()
 }
 
 /**
- * Delays execution until timer reaches specified absolute time
+ * Hardware-based delay that iterates until timer reaches specified absolute time
  *
  * This status driven control mechanism prevents cumulative drift for higher
  * accuracy, with the loop delaying on average for the specified interval.
@@ -117,7 +117,12 @@ void delayUntil(uint32_t next_time)
     MMIO32(TIMER_EVENT_COMPARE) = 0;
 }
 
-/* Software delay by looping for specified interval in milliseconds */
+/**
+ * Software delay that iterates for a specified interval in milliseconds
+ *
+ * Relative delay function using a simple busy-wait loop; this delays
+ * for at least the specified interval due to local and cumulative drift.
+ */
 void delay(uint32_t delay_ms)
 {
     volatile int count = delay_ms * DELAY_1MS_ITERATIONS;
