@@ -1,4 +1,4 @@
-// Output for delay() in -O1 or above
+; Output for delay() in -O1 or above
 
 	.section	__TEXT,__text,regular,pure_instructions
 	.build_version macos, 12, 0	sdk_version 13, 1
