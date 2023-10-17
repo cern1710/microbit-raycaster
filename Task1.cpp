@@ -2,7 +2,7 @@
 
 #define _DEBUG
 
-#define MMIO32(addr)    (*(volatile uint32_t *)addr)
+#define MMIO32(addr)    (*(volatile uint32_t *)(addr))
 
 /* GPIO addresses : base (0x50000000) + offset */
 #define GPIO_OUT        0x50000504
@@ -167,8 +167,8 @@ void rollingCounter()
 void knightRider()
 {
     uint32_t next_time;
-    int8_t direction = 1, position = 0;
-    const uint32_t interval = convertMsToTicks(125); // approx. 1s for 1 full scroll
+    int8_t direction = -1, position = 0;
+    const uint32_t interval = convertMsToTicks(125); // ~1s for 1 full scroll
 
     startTimer();
     next_time = captureTime() + interval;
@@ -176,10 +176,8 @@ void knightRider()
         setLEDs(BIT_SHIFT(position));
 
         /* Check boundary conditions and reverse if needed */
-        if ((position == (NUM_LEDS - 1) && direction == 1) ||
-                (position == 0 && direction == -1))
+        if (!(position % (NUM_LEDS - 1)))
             direction = -direction;
-
         position += direction;
 
         delayUntil(next_time);
