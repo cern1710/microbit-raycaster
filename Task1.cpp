@@ -193,6 +193,7 @@ void countClicks()
     /* Configure the task for falling edge detection on P13 */
     MMIO32(GPIOTE_CONFIG) = EVENT_MODE | PSEL_13 | FALLING_EDGE;
 
+    /* One empty loop after click event to prevent multiple detections. */
     for (;;) {
         current_state = MMIO32(GPIOTE_IN);
 
@@ -204,7 +205,7 @@ void countClicks()
         last_state = current_state;
 
         /**
-         * Debouncing delay prevents spurious transitions
+         * Debouncing delay prevents spurious transitions.
          * Source: https://my.eng.utah.edu/~cs5780/debouncing.pdf
          */
         delay(30);
