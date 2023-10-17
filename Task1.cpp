@@ -175,7 +175,7 @@ void knightRider()
     for (;;) {
         setLEDs(BIT_SHIFT(position));
 
-        /* Check boundary conditions and reverse if needed */
+        /* Check boundary conditions and reverse if mod(pos, 7) == 0 */
         if (!(position % (NUM_LEDS - 1)))
             direction = -direction;
         position += direction;
