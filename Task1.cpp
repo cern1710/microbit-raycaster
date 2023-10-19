@@ -1,6 +1,6 @@
 #include "Microbit.h"
 
-#define _DEBUG
+// #define _DEBUG
 
 #define MMIO32(addr)    (*(volatile uint32_t *)(addr))
 
@@ -190,7 +190,6 @@ void countClicks()
     uint8_t num_clicks = 0;
     uint8_t current_state = 0, last_state = 0;
 
-    /* Configure the task for falling edge detection on P13 */
     MMIO32(GPIOTE_CONFIG) = EVENT_MODE | PSEL_13 | FALLING_EDGE;
 
     /* One empty loop after click event to prevent multiple detections. */
@@ -213,14 +212,14 @@ void countClicks()
 }
 
 #ifdef _DEBUG
-#define TEST_UINT 81
+    #define TEST_UINT 81
 
-int main()
-{
-    // turnOn();
-    // setLEDs((uint8_t)TEST_UINT);
-    rollingCounter();
-    // knightRider();
-    // countClicks();
-}
+    int main()
+    {
+        // turnOn();
+        // setLEDs((uint8_t)TEST_UINT);
+        rollingCounter();
+        // knightRider();
+        // countClicks();
+    }
 #endif
