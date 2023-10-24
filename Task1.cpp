@@ -1,6 +1,6 @@
 #include "Microbit.h"
 
-// #define _DEBUG
+#define _DEBUG
 
 #define MMIO32(addr)    (*(volatile uint32_t *)(addr))
 
@@ -218,8 +218,8 @@ void countClicks()
     {
         // turnOn();
         // setLEDs((uint8_t)TEST_UINT);
-        rollingCounter();
+        // rollingCounter();
         // knightRider();
-        // countClicks();
+        countClicks();
     }
 #endif
