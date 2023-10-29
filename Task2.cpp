@@ -3,8 +3,7 @@
 
 #define _DEBUG
 
-#define HIGH(pin)  (uint32_t)(1 << pin)
-#define LOW(pin)   (uint32_t)(1 << pin)
+#define BIT_SHIFT(pin)  (uint32_t)(1 << pin)
 
 /**
  * Rough approximation of number of loop iterations to approximate 1 ms.
@@ -35,11 +34,11 @@ enum Columns {
 void setLED(Rows row, Columns col)
 {
     if (col == COL4)
-        NRF_P1->DIR |= LOW(col);
+        NRF_P1->DIR |= BIT_SHIFT(col);
     else
-        NRF_P0->DIR |= LOW(col);
-    NRF_P0->OUT |= HIGH(row);
-    NRF_P0->DIR |= HIGH(row);
+        NRF_P0->DIR |= BIT_SHIFT(col);
+    NRF_P0->OUT |= BIT_SHIFT(row);
+    NRF_P0->DIR |= BIT_SHIFT(row);
 }
 
 void clearLEDs()
