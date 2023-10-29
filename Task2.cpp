@@ -46,8 +46,6 @@ void clearLEDs()
 {
     NRF_P1->DIR = 0;
     NRF_P0->DIR = 0;
-    NRF_P0->OUT = 0;
-    NRF_P0->DIR = 0;
 }
 
 /**
@@ -70,18 +68,18 @@ void beHappy()
     while(1) {
         setLED(ROW2, COL2);
         setLED(ROW2, COL4);
-        delay(2);
+        delay(5);
         clearLEDs();
 
         setLED(ROW4, COL1);
         setLED(ROW4, COL5);
-        delay(2);
+        delay(5);
         clearLEDs();
 
         setLED(ROW5, COL2);
         setLED(ROW5, COL3);
         setLED(ROW5, COL4);
-        delay(2);
+        delay(5);
         clearLEDs();
     }
 }
