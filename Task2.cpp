@@ -3,7 +3,16 @@
 
 #define _DEBUG
 
-#define BIT_SHIFT(pin)  (uint32_t)(1 << pin)
+#define HIGH(pin)  (uint32_t)(1 << pin)
+#define LOW(pin)   (uint32_t)(1 << pin)
+
+/**
+ * Rough approximation of number of loop iterations to approximate 1 ms.
+ *
+ * 10667 ~= 64 MHz / (1000 ms/s * (2(ldr) + 1(sub) + 2(str) + 1(cbnz)))
+ * Source: https://www.cse.scu.edu/~dlewis/book3/docs/ARM_Cortex-M4F_Instruction_Summary.pdf
+ */
+#define DELAY_1MS_ITERATIONS    10667
 
 enum Rows {
     ROW1 = 21,
@@ -23,27 +32,58 @@ enum Columns {
 
 /********************* Helper functions *********************/
 
-void setLED(Rows row, Columns col) {
+void setLED(Rows row, Columns col)
+{
     if (col == COL4)
-        NRF_P1->OUT = BIT_SHIFT(col);
+        NRF_P1->DIR |= LOW(col);
     else
-        NRF_P0->OUT = BIT_SHIFT(col);
-    NRF_P0->OUT = BIT_SHIFT(row);
+        NRF_P0->DIR |= LOW(col);
+    NRF_P0->OUT |= HIGH(row);
+    NRF_P0->DIR |= HIGH(row);
 }
 
-void clearLED(Rows row, Columns col) {
-    if (col == COL4)
-        NRF_P1->OUTCLR = BIT_SHIFT(col);
-    else
-        NRF_P0->OUTCLR = BIT_SHIFT(col);
-    NRF_P0->OUTCLR = BIT_SHIFT(row);
+void clearLEDs()
+{
+    NRF_P1->DIR = 0;
+    NRF_P0->DIR = 0;
+    NRF_P0->OUT = 0;
+    NRF_P0->DIR = 0;
+}
+
+/**
+ * Software delay that pauses execution for a given interval in milliseconds.
+ *
+ * Utilizes a simple busy-wait loop. Due to local and cumulative drifts, the
+ * actual (software) delay might be slightly longer than the specified interval.
+ */
+void delay(uint32_t delay_ms)
+{
+    volatile int count = delay_ms * DELAY_1MS_ITERATIONS;
+
+    while (count--);
 }
 
 /********************* Task functions *********************/
 
 void beHappy()
 {
+    while(1) {
+        setLED(ROW2, COL2);
+        setLED(ROW2, COL4);
+        delay(2);
+        clearLEDs();
 
+        setLED(ROW4, COL1);
+        setLED(ROW4, COL5);
+        delay(2);
+        clearLEDs();
+
+        setLED(ROW5, COL2);
+        setLED(ROW5, COL3);
+        setLED(ROW5, COL4);
+        delay(2);
+        clearLEDs();
+    }
 }
 
 void beVeryHappy()
@@ -66,7 +106,7 @@ void showNumber(int n)
 
 int main()
 {
-    // beHappy();
+    beHappy();
     // beVeryHappy();
     // beHappyAndFree();
     // showNumber(TEST_UINT);
