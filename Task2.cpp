@@ -5,6 +5,13 @@
 
 #define BIT_SHIFT(pin)  (uint32_t)(1 << pin)
 
+#define BASE_FREQ_16M   16000000.0
+#define MS_PER_SECOND   1000
+
+/* Timer configuration offsets */
+#define MODE_32_BITS    3
+#define PRESCALAR       8
+
 /**
  * Rough approximation of number of loop iterations to approximate 1 ms.
  *
@@ -44,6 +51,42 @@ void clearLEDs()
     NRF_P0->DIR = 0;
 }
 
+uint32_t convertMsToTicks(float delay_ms)
+{
+    float fTIMER = BASE_FREQ_16M / BIT_SHIFT(PRESCALAR);
+    float ticks_per_ms = fTIMER / MS_PER_SECOND;
+
+    return (uint32_t)(ticks_per_ms * delay_ms);
+}
+
+void startTimer()
+{
+    NRF_TIMER1->BITMODE = MODE_32_BITS;
+    NRF_TIMER1->PRESCALER = PRESCALAR;
+    NRF_TIMER1->TASKS_START = 1;
+}
+
+uint32_t captureTime()
+{
+    NRF_TIMER1->TASKS_CAPTURE[0] = 1;
+    NRF_TIMER1->TASKS_CAPTURE[0] = 0;   // Stops repeated captures
+
+    return NRF_TIMER1->CC[0];
+}
+
+/**
+ * Hardware-based delay waits until timer reaches specified absolute time.
+ *
+ * This status-driven control mechanism ensures higher accuracy by preventing
+ * cumulative drift. The system pauses, on average, for the provided interval.
+ */
+void delayUntil(uint32_t next_time)
+{
+    NRF_TIMER1->CC[0] = next_time;
+    while (!(NRF_TIMER1->EVENTS_COMPARE[0]));
+    NRF_TIMER1->EVENTS_COMPARE[0] = 0;
+}
+
 /**
  * Software delay that pauses execution for a given interval in milliseconds.
  *
@@ -62,6 +105,7 @@ void delay(uint32_t delay_ms)
 void beHappy()
 {
     while(1) {
+        // TODO: maybe we can just set row and col separately?
         setLED(ROW2, COL2);
         setLED(ROW2, COL4);
         delay(5);
@@ -82,7 +126,31 @@ void beHappy()
 
 void beVeryHappy()
 {
+    const uint32_t interval = convertMsToTicks(5);
 
+    startTimer();
+    uint32_t next_time = captureTime() + interval;
+
+    while(1) {
+        setLED(ROW2, COL2);
+        setLED(ROW2, COL4);
+        delayUntil(next_time);
+        next_time += interval;
+        clearLEDs();
+
+        setLED(ROW4, COL1);
+        setLED(ROW4, COL5);
+        delayUntil(next_time);
+        next_time += interval;
+        clearLEDs();
+
+        setLED(ROW5, COL2);
+        setLED(ROW5, COL3);
+        setLED(ROW5, COL4);
+        delayUntil(next_time);
+        next_time += interval;
+        clearLEDs();
+    }
 }
 
 void beHappyAndFree()
@@ -100,8 +168,8 @@ void showNumber(int n)
 
 int main()
 {
-    beHappy();
-    // beVeryHappy();
+    // beHappy();
+    beVeryHappy();
     // beHappyAndFree();
     // showNumber(TEST_UINT);
 }
