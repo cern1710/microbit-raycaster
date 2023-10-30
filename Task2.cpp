@@ -33,12 +33,9 @@ enum Columns {
 
 void setLED(Rows row, Columns col)
 {
-    if (col == COL4)
-        NRF_P1->DIR |= BIT_SHIFT(col);
-    else
-        NRF_P0->DIR |= BIT_SHIFT(col);
-    NRF_P0->OUT |= BIT_SHIFT(row);
+    ((col == COL4) ? NRF_P1 : NRF_P0)->DIR |= BIT_SHIFT(col);
     NRF_P0->DIR |= BIT_SHIFT(row);
+    NRF_P0->OUT = BIT_SHIFT(row);
 }
 
 void clearLEDs()
