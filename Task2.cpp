@@ -10,6 +10,8 @@
 
 #define PRESCALER_VALUE 8
 
+#define CYCLES_PER_50MHZ    1250    // 16MHz / (50 MHz * (2^8))
+
 #define LED_ROWS    5
 #define LED_COLS    5
 #define NUM_DIGITS  10
@@ -115,6 +117,9 @@ void delay(uint32_t delay_ms)
 
 /* ##########################  LED functions  #################################### */
 
+volatile int current_row = 0;
+volatile bool led_buffer[LED_ROWS][LED_COLS] = { false };
+
 void setLED(Rows row, Columns col)
 {
     ((col == COL4) ? NRF_P1 : NRF_P0)->DIR |= BIT_SHIFT(col);
@@ -128,31 +133,29 @@ void clearLEDs()
     NRF_P0->DIR = 0;
 }
 
+void updateLEDRow(int row)
+{
+    int col;
+
+    for (col = 0; col < LED_COLS; col++)
+        if (led_buffer[row][col])
+            setLED(rows[row], cols[col]);
+}
+
 void updateLEDs(const bool led_states[LED_ROWS][LED_COLS])
 {
     int row, col;
-    volatile int iter;
 
-    for (iter = 0; iter < NUM_ITER; iter++)
-        for (row = 0; row < LED_ROWS; row++) {
-            for (col = 0; col < LED_COLS; col++)
-                if (led_states[row][col])
-                    setLED(rows[row], cols[col]);
-            clearLEDs();
-        }
-}
-
-void drawSmile()
-{
-    clearLEDs();
-    updateLEDs(smiley_face);
+    for (row = 0; row < LED_ROWS; row++)
+        for (col = 0; col < LED_COLS; col++)
+            led_buffer[row][col] = led_states[row][col];
 }
 
 /* ##########################  Interrupt functions  #################################### */
 
 void initInterruptTimer(uint32_t interval)
 {
-    NRF_TIMER1->BITMODE = TIMER_BITMODE_BITMODE_24Bit;
+    NRF_TIMER1->BITMODE = TIMER_BITMODE_BITMODE_16Bit;
     NRF_TIMER1->SHORTS = TIMER_SHORTS_COMPARE0_CLEAR_Msk;
     NRF_TIMER1->PRESCALER = PRESCALER_VALUE;
     NRF_TIMER1->CC[0] = interval; // Set interval for compare match
@@ -167,7 +170,10 @@ void TIMER1_IRQHandler()
 {
     if (NRF_TIMER1->EVENTS_COMPARE[0] != 0) {
         NRF_TIMER1->EVENTS_COMPARE[0] = 0;  // Clear match event
-        drawSmile();
+
+        clearLEDs();
+        updateLEDRow(current_row);  // Update current row
+        current_row = (current_row + 1) % LED_ROWS;  // Move to the next row
     }
 }
 
@@ -257,7 +263,8 @@ void showSingleNumber(int n)
     }
 }
 
-void showPartialDigit(int n, int start_col, bool led_states[LED_ROWS][LED_COLS])
+void showPartialDigit(int n, int start_col,
+                        bool led_states[LED_ROWS][LED_COLS])
 {
     if (start_col > LED_COLS) return;
     int row, col, led_col;
@@ -270,62 +277,114 @@ void showPartialDigit(int n, int start_col, bool led_states[LED_ROWS][LED_COLS])
             led_col = col + start_col;
 
             if (led_col < 0 || led_col >= LED_COLS) continue;
-            led_states[row][led_col] = (row_data & (1 << (LED_COLS - 1 - col))) != 0;
+            led_states[row][led_col] =
+                (row_data & (1 << (LED_COLS - 1 - col))) != 0;
         }
     }
 }
 
+void initUpdateLEDTimer(uint32_t interval) {
+    NRF_TIMER2->BITMODE = TIMER_BITMODE_BITMODE_16Bit;  // Use 16 bit timer
+    NRF_TIMER2->PRESCALER = PRESCALER_VALUE;  // Set prescaler
+    NRF_TIMER2->CC[0] = interval;  // Set interval for compare match
+    NRF_TIMER2->SHORTS = TIMER_SHORTS_COMPARE0_CLEAR_Msk;  // Clear timer on compare match
+    NRF_TIMER2->INTENSET = TIMER_INTENSET_COMPARE0_Set << TIMER_INTENSET_COMPARE0_Pos;  // Enable interrupt on compare match
+
+    NVIC_EnableIRQ(TIMER2_IRQn);  // Enable TIMER2 interrupt in the NVIC
+    NVIC_SetPriority(TIMER2_IRQn, 1);  // Set priority
+}
+
+void TIMER2_IRQHandler() {
+    if (NRF_TIMER2->EVENTS_COMPARE[0]) {
+        NRF_TIMER2->EVENTS_COMPARE[0] = 0;  // Clear compare match event
+        updateLEDRow(current_row);  // Update current row
+        current_row = (current_row + 1) % LED_ROWS;  // Move to the next row
+    }
+}
+
+void startUpdateLEDTimer() {
+    NRF_TIMER2->TASKS_START = 1;
+}
+
+void stopUpdateLEDTimer() {
+    NRF_TIMER2->TASKS_STOP = 1;
+}
+
+void updateLEDsIter(const bool led_states[LED_ROWS][LED_COLS]) {
+    int row, col;
+
+    for (row = 0; row < LED_ROWS; row++)
+        for (col = 0; col < LED_COLS; col++)
+            led_buffer[row][col] = led_states[row][col];
+
+    startUpdateLEDTimer();  // Start the TIMER2 to update LEDs
+}
+
 void showScrollingNumber(int n)
 {
+    initUpdateLEDTimer(5);
     char num_str[12];  // Enough space for 32-bit integer, sign, and null terminator
     intToStr(num_str, n);
     int length = strLength(num_str);
     bool led_states[LED_ROWS][LED_COLS] = { false };
-    int pos, i;
+    int pos, len;
     int digit_start_col;
 
-    for (pos = length * LED_COLS; pos >= -LED_COLS; --pos) {
+    for (pos = length * LED_COLS; pos >= -LED_COLS; pos--) {
         my_memset(led_states, 0, sizeof(led_states));  // Clear the buffer
 
-        for (i = 0; i < length; ++i) {
-            digit_start_col = pos - (length - 1 - i) * LED_COLS; // Reverse
+        for (len = 0; len < length; len++) {
+            digit_start_col = pos - (length - 1 - len) * LED_COLS; // Reverse
 
-            if (num_str[i] >= '0' && num_str[i] <= '9')
-                showPartialDigit(num_str[i] - '0', digit_start_col, led_states);
+            if (num_str[len] >= '0' && num_str[len] <= '9')
+                showPartialDigit(num_str[len] - '0', digit_start_col, led_states);
         }
-        updateLEDs(led_states);
-        delay(3);  // Adjust delay as needed
+        updateLEDsIter(led_states);
+        delay(1);
         clearLEDs();
     }
+    stopUpdateLEDTimer();
 }
 
 /* ##########################  Task functions  #################################### */
 
 void beHappy()
 {
-    uint32_t interval = convertMsToTicks(5);
+    int row, col;
 
     while(1) {
-        drawSmile();
-        delay(interval);
+        for (row = 0; row < LED_ROWS; row++) {
+            for (col = 0; col < LED_COLS; col++)
+                if (smiley_face[row][col])
+                    setLED(rows[row], cols[col]);
+            delay(4);
+            clearLEDs();
+        }
     }
 }
 
 void beVeryHappy()
 {
+    int row, col;
     uint32_t interval = convertMsToTicks(5);
     initRegularTimer();
     uint32_t next_time = captureTime() + interval;
 
     while(1) {
-        drawSmile();
-        delayUntil(next_time);
-        next_time += interval;
+        for (row = 0; row < LED_ROWS; row++) {
+            for (col = 0; col < LED_COLS; col++)
+                if (smiley_face[row][col])
+                    setLED(rows[row], cols[col]);
+            delayUntil(next_time);
+            next_time += interval;
+            clearLEDs();
+        }
     }
 }
 void beHappyAndFree()
 {
-    initInterruptTimer(convertMsToTicks(60));
+    updateLEDs(smiley_face);
+    initInterruptTimer(convertMsToTicks(5));
     configureInterrupt();
     startInterruptTimer();
 }
@@ -347,7 +406,7 @@ int main()
 {
     // beHappy();
     // beVeryHappy();
-    beHappyAndFree();
-    // showNumber(TEST_UINT);
+    // beHappyAndFree();
+    showNumber(TEST_UINT);
 }
 #endif
