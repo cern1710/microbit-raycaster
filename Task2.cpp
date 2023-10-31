@@ -63,7 +63,10 @@ const bool smiley_face[LED_ROWS][LED_COLS] = {
     {0, 1, 1, 1, 0}
 };
 
-/* ##########################  Timer functions  #################################### */
+volatile int current_row = 0;
+volatile bool led_buffer[LED_ROWS][LED_COLS] = { false };
+
+/* ####################################  Timer functions  #################################### */
 
 uint32_t convertMsToTicks(float delay_ms)
 {
@@ -113,10 +116,7 @@ void delay(uint32_t delay_ms)
     while (count--);
 }
 
-/* ##########################  LED functions  #################################### */
-
-volatile int current_row = 0;
-volatile bool led_buffer[LED_ROWS][LED_COLS] = { false };
+/* ####################################  LED functions  #################################### */
 
 void setLED(Rows row, Columns col)
 {
@@ -157,11 +157,10 @@ void updateBufferWithDigit(int digit) {
         for (col = 0; col < LED_COLS; ++col)
             if (led_digits[digit][row] & (1 << (LED_COLS - 1 - col)))
                 led_states[row][col] = true;
-
     updateLEDBuffer(led_states);
 }
 
-/* ##########################  Interrupt functions  #################################### */
+/* ####################################  Interrupt functions  #################################### */
 
 void initInterruptTimer(uint32_t interval)
 {
@@ -195,15 +194,14 @@ void configureInterrupt()
     // Enable interrupt in the NVIC
     NVIC_SetVector(TIMER1_IRQn, (uint32_t)TIMER1_IRQHandler);
     NVIC_EnableIRQ(TIMER1_IRQn);
-    NVIC_SetPriority(TIMER1_IRQn, 0);   // Set priority to 0
+    NVIC_SetPriority(TIMER1_IRQn, 0);
 }
 
-/* ##########################  String manipulation functions  #################################### */
+/* ####################################  String manipulation functions  #################################### */
 
 void reverse(char *str, int length)
 {
-    int start = 0;
-    int end = length - 1;
+    int start = 0, end = length - 1;
     char temp;
 
     for (; start < end; start++, end--) {
@@ -221,13 +219,10 @@ void intToStr(char *str, int num)
         str[i++] = '0';
     } else {
         while (num > 0) {
-            str[i++] = (num % 10) + '0';
-            num /= 10;
+            str[i++] = (num % 10) + '0';  // Convert last digit to char, add to str
+            num /= 10;  // Remove last digit
         }
-        if (str[0] == '-')
-            reverse(str + 1, i - 1);
-        else
-            reverse(str, i);
+        reverse(str, i); // Reverse string because digits are added in reverse
     }
     str[i] = '\0';
 }
@@ -249,7 +244,7 @@ void* my_memset(void* ptr, int value, size_t num)
     return ptr;
 }
 
-/* ##########################  Number scrolling functions  #################################### */
+/* ####################################  Number scrolling functions  #################################### */
 
 void showSingleNumber(int n)
 {
@@ -296,7 +291,6 @@ void showScrollingNumber(int n)
 
     for (pos = length * LED_COLS; pos >= -LED_COLS; pos--) {
         my_memset(led_states, 0, sizeof(led_states));  // Clear the buffer
-
         for (len = 0; len < length; len++) {
             digit_start_col = pos - (length - 1 - len) * LED_COLS; // Reverse
 
@@ -307,7 +301,7 @@ void showScrollingNumber(int n)
     }
 }
 
-/* ##########################  Task functions  #################################### */
+/* ####################################  Task functions  #################################### */
 
 void beHappy()
 {
@@ -327,7 +321,7 @@ void beHappy()
 void beVeryHappy()
 {
     int row, col;
-    uint32_t interval = convertMsToTicks(5);
+    const uint32_t interval = convertMsToTicks(5);
     initRegularTimer();
     uint32_t next_time = captureTime() + interval;
 
