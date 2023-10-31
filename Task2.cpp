@@ -227,10 +227,6 @@ void intToStr(char *str, int num)
     if (num == 0) {
         str[i++] = '0';
     } else {
-        if (num < 0) {
-            str[i++] = '-';
-            num = -num;
-        }
         while (num > 0) {
             str[i++] = (num % 10) + '0';
             num /= 10;
@@ -330,7 +326,7 @@ void beHappy()
             for (col = 0; col < LED_COLS; col++)
                 if (smiley_face[row][col])
                     setLED(rows[row], cols[col]);
-            delay(4);
+            delay(convertMsToTicks(5));
             clearLEDs();
         }
     }
