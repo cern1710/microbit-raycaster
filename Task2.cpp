@@ -10,8 +10,6 @@
 
 #define PRESCALER_VALUE 8
 
-#define CYCLES_PER_50MHZ    1250    // 16MHz / (50 MHz * (2^8))
-
 #define LED_ROWS    5
 #define LED_COLS    5
 #define NUM_DIGITS  10
@@ -45,16 +43,16 @@ const Rows rows[] = {ROW1, ROW2, ROW3, ROW4, ROW5};
 const Columns cols[] = {COL1, COL2, COL3, COL4, COL5};
 
 const uint8_t led_digits[NUM_DIGITS][LED_ROWS] = {
-    { 0b01110, 0b01010, 0b01010, 0b01010, 0b01110 },
-    { 0b00100, 0b01100, 0b00100, 0b00100, 0b01110 },
-    { 0b01110, 0b00010, 0b01110, 0b01000, 0b01110 },
-    { 0b01110, 0b00010, 0b01110, 0b00010, 0b01110 },
-    { 0b01010, 0b01010, 0b01110, 0b00010, 0b00010 },
-    { 0b01110, 0b01000, 0b01110, 0b00010, 0b01110 },
-    { 0b01110, 0b01000, 0b01110, 0b01010, 0b01110 },
-    { 0b01110, 0b01010, 0b00010, 0b00010, 0b00010 },
-    { 0b01110, 0b01010, 0b01110, 0b01010, 0b01110 },
-    { 0b01110, 0b01010, 0b01110, 0b00010, 0b01110 }
+    { 0b01110, 0b01010, 0b01010, 0b01010, 0b01110 },    // 0
+    { 0b00100, 0b01100, 0b00100, 0b00100, 0b01110 },    // 1
+    { 0b01110, 0b00010, 0b01110, 0b01000, 0b01110 },    // 2
+    { 0b01110, 0b00010, 0b01110, 0b00010, 0b01110 },    // 3
+    { 0b01010, 0b01010, 0b01110, 0b00010, 0b00010 },    // 4
+    { 0b01110, 0b01000, 0b01110, 0b00010, 0b01110 },    // 5
+    { 0b01110, 0b01000, 0b01110, 0b01010, 0b01110 },    // 6
+    { 0b01110, 0b01010, 0b00010, 0b00010, 0b00010 },    // 7
+    { 0b01110, 0b01010, 0b01110, 0b01010, 0b01110 },    // 8
+    { 0b01110, 0b01010, 0b01110, 0b00010, 0b01110 }     // 9
 };
 
 const bool smiley_face[LED_ROWS][LED_COLS] = {
@@ -142,7 +140,7 @@ void updateLEDRow(int row)
             setLED(rows[row], cols[col]);
 }
 
-void updateLEDs(const bool led_states[LED_ROWS][LED_COLS])
+void updateLEDBuffer(const bool led_states[LED_ROWS][LED_COLS])
 {
     int row, col;
 
@@ -151,7 +149,7 @@ void updateLEDs(const bool led_states[LED_ROWS][LED_COLS])
             led_buffer[row][col] = led_states[row][col];
 }
 
-void convertAndDisplayDigit(int digit) {
+void updateBufferWithDigit(int digit) {
     bool led_states[LED_ROWS][LED_COLS] = { false };
     int row, col;
 
@@ -160,7 +158,7 @@ void convertAndDisplayDigit(int digit) {
             if (led_digits[digit][row] & (1 << (LED_COLS - 1 - col)))
                 led_states[row][col] = true;
 
-    updateLEDs(led_states);
+    updateLEDBuffer(led_states);
 }
 
 /* ##########################  Interrupt functions  #################################### */
@@ -176,11 +174,6 @@ void initInterruptTimer(uint32_t interval)
 void startInterruptTimer()
 {
     NRF_TIMER1->TASKS_START = 1;
-}
-
-void stopInterruptTimer()
-{
-    NRF_TIMER1->TASKS_START = 0;
 }
 
 void TIMER1_IRQHandler()
@@ -260,7 +253,7 @@ void* my_memset(void* ptr, int value, size_t num)
 
 void showSingleNumber(int n)
 {
-    convertAndDisplayDigit(n);
+    updateBufferWithDigit(n);
     initInterruptTimer(convertMsToTicks(4));
     configureInterrupt();
     startInterruptTimer();
@@ -269,7 +262,6 @@ void showSingleNumber(int n)
 void showPartialDigit(int n, int start_col,
                         bool led_states[LED_ROWS][LED_COLS])
 {
-    stopInterruptTimer();
     if (start_col > LED_COLS) return;
     int row, col, led_col;
     uint8_t row_data;
@@ -286,7 +278,7 @@ void showPartialDigit(int n, int start_col,
                 (row_data & (1 << (LED_COLS - 1 - col))) != 0;
         }
     }
-    updateLEDs(led_states);
+    updateLEDBuffer(led_states);
 }
 
 void showScrollingNumber(int n)
@@ -352,7 +344,7 @@ void beVeryHappy()
 }
 void beHappyAndFree()
 {
-    updateLEDs(smiley_face);
+    updateLEDBuffer(smiley_face);
     initInterruptTimer(convertMsToTicks(5));
     configureInterrupt();
     startInterruptTimer();
