@@ -151,6 +151,18 @@ void updateLEDs(const bool led_states[LED_ROWS][LED_COLS])
             led_buffer[row][col] = led_states[row][col];
 }
 
+void convertAndDisplayDigit(int digit) {
+    bool led_states[LED_ROWS][LED_COLS] = { false };
+    int row, col;
+
+    for (row = 0; row < LED_ROWS; ++row)
+        for (col = 0; col < LED_COLS; ++col)
+            if (led_digits[digit][row] & (1 << (LED_COLS - 1 - col)))
+                led_states[row][col] = true;
+
+    updateLEDs(led_states);
+}
+
 /* ##########################  Interrupt functions  #################################### */
 
 void initInterruptTimer(uint32_t interval)
@@ -164,6 +176,11 @@ void initInterruptTimer(uint32_t interval)
 void startInterruptTimer()
 {
     NRF_TIMER1->TASKS_START = 1;
+}
+
+void stopInterruptTimer()
+{
+    NRF_TIMER1->TASKS_START = 0;
 }
 
 void TIMER1_IRQHandler()
@@ -234,7 +251,8 @@ int strLength(char *str)
     return length;
 }
 
-void* my_memset(void* ptr, int value, size_t num) {
+void* my_memset(void* ptr, int value, size_t num)
+{
     unsigned char* p = static_cast<unsigned char*>(ptr);
 
     while (num--)
@@ -246,26 +264,16 @@ void* my_memset(void* ptr, int value, size_t num) {
 
 void showSingleNumber(int n)
 {
-    if (n < 0 || n >= NUM_DIGITS) return;  // Out of range
-    int row, col;
-    uint8_t row_data;
-
-    while(1) {
-        for (row = 0; row < LED_ROWS; row++) {
-            row_data = led_digits[n][row];
-
-            for (col = 0; col < LED_COLS; col++)
-                if (row_data & (1 << (LED_COLS - 1 - col)))
-                    setLED(rows[row], cols[col]);
-            delay(1);  // Add a short delay to make the LEDs visible
-            clearLEDs();
-        }
-    }
+    convertAndDisplayDigit(n);
+    initInterruptTimer(convertMsToTicks(4));
+    configureInterrupt();
+    startInterruptTimer();
 }
 
 void showPartialDigit(int n, int start_col,
                         bool led_states[LED_ROWS][LED_COLS])
 {
+    stopInterruptTimer();
     if (start_col > LED_COLS) return;
     int row, col, led_col;
     uint8_t row_data;
@@ -276,59 +284,27 @@ void showPartialDigit(int n, int start_col,
         for (col = 0; col < LED_COLS; ++col) {
             led_col = col + start_col;
 
-            if (led_col < 0 || led_col >= LED_COLS) continue;
+            if (led_col < 0 || led_col >= LED_COLS)
+                continue;
             led_states[row][led_col] =
                 (row_data & (1 << (LED_COLS - 1 - col))) != 0;
         }
     }
-}
-
-void initUpdateLEDTimer(uint32_t interval) {
-    NRF_TIMER2->BITMODE = TIMER_BITMODE_BITMODE_16Bit;  // Use 16 bit timer
-    NRF_TIMER2->PRESCALER = PRESCALER_VALUE;  // Set prescaler
-    NRF_TIMER2->CC[0] = interval;  // Set interval for compare match
-    NRF_TIMER2->SHORTS = TIMER_SHORTS_COMPARE0_CLEAR_Msk;  // Clear timer on compare match
-    NRF_TIMER2->INTENSET = TIMER_INTENSET_COMPARE0_Set << TIMER_INTENSET_COMPARE0_Pos;  // Enable interrupt on compare match
-
-    NVIC_EnableIRQ(TIMER2_IRQn);  // Enable TIMER2 interrupt in the NVIC
-    NVIC_SetPriority(TIMER2_IRQn, 1);  // Set priority
-}
-
-void TIMER2_IRQHandler() {
-    if (NRF_TIMER2->EVENTS_COMPARE[0]) {
-        NRF_TIMER2->EVENTS_COMPARE[0] = 0;  // Clear compare match event
-        updateLEDRow(current_row);  // Update current row
-        current_row = (current_row + 1) % LED_ROWS;  // Move to the next row
-    }
-}
-
-void startUpdateLEDTimer() {
-    NRF_TIMER2->TASKS_START = 1;
-}
-
-void stopUpdateLEDTimer() {
-    NRF_TIMER2->TASKS_STOP = 1;
-}
-
-void updateLEDsIter(const bool led_states[LED_ROWS][LED_COLS]) {
-    int row, col;
-
-    for (row = 0; row < LED_ROWS; row++)
-        for (col = 0; col < LED_COLS; col++)
-            led_buffer[row][col] = led_states[row][col];
-
-    startUpdateLEDTimer();  // Start the TIMER2 to update LEDs
+    updateLEDs(led_states);
 }
 
 void showScrollingNumber(int n)
 {
-    initUpdateLEDTimer(5);
-    char num_str[12];  // Enough space for 32-bit integer, sign, and null terminator
+    char num_str[12];  // Enough space for 32-bit integer
     intToStr(num_str, n);
     int length = strLength(num_str);
     bool led_states[LED_ROWS][LED_COLS] = { false };
     int pos, len;
     int digit_start_col;
+
+    initInterruptTimer(4);
+    configureInterrupt();
+    startInterruptTimer();
 
     for (pos = length * LED_COLS; pos >= -LED_COLS; pos--) {
         my_memset(led_states, 0, sizeof(led_states));  // Clear the buffer
@@ -339,11 +315,8 @@ void showScrollingNumber(int n)
             if (num_str[len] >= '0' && num_str[len] <= '9')
                 showPartialDigit(num_str[len] - '0', digit_start_col, led_states);
         }
-        updateLEDsIter(led_states);
-        delay(1);
-        clearLEDs();
+        delay(100);
     }
-    stopUpdateLEDTimer();
 }
 
 /* ##########################  Task functions  #################################### */
