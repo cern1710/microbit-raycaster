@@ -2,23 +2,31 @@
 #include "nrf52833.h"
 
 #define _DEBUG
+// #define _LOOPY
 
-#define BIT_SHIFT(pin)  (uint32_t)(1 << pin)
+#define BIT_SHIFT(n)  (uint32_t)(1 << n)
 
+/* Milliseconds -> clock cycle conversion */
+#define PRESCALER_VALUE 8
 #define BASE_FREQ_16M   16000000.0
 #define MS_PER_SECOND   1000
 
-#define PRESCALER_VALUE 8
-
+/* LED display macros */
 #define LED_ROWS    5
 #define LED_COLS    5
 #define NUM_DIGITS  10
-#define BUF_LEN     12
+#define BUF_LEN     12  // Max length of character buffer for scrolling integer
 
-#define MS_TO_10HZ      4
-#define SCROLL_SPEED    50
-
+/* Converts column of digit in led_digit[] to binary */
 #define BIN_DIGIT(col)  (1 << (LED_COLS - 1 - col))
+
+/* Delay milliseconds for timer/interrupts */
+#define MS_TO_10HZ            4     // (4ms * 5rows) = 20 ms => 1/50 of a second
+#ifdef _LOOPY
+    #define SCROLL_SPEED_IN_MS  50
+#else
+    #define SCROLL_SPEED_IN_MS 200
+#endif
 /**
  * Rough approximation of number of loop iterations to approximate 1 ms.
  *
@@ -39,7 +47,7 @@ enum Columns {
     COL1 = 28,
     COL2 = 11,
     COL3 = 31,
-    COL4 = 5,   // NOTE: COL4 is in P1
+    COL4 = 5,   // Note: COL4 is in P1
     COL5 = 30
 };
 
@@ -67,6 +75,7 @@ const bool smiley_face[LED_ROWS][LED_COLS] = {
     {0, 1, 1, 1, 0}
 };
 
+/* Global variables for modification by timer interrupt */
 volatile int current_row = 0;
 volatile bool led_buffer[LED_ROWS][LED_COLS] = { false };
 
@@ -86,31 +95,29 @@ void clearLEDs()
     NRF_P0->DIR = 0;
 }
 
+/* Updates a row of the LED buffer; used by timer interrupt */
 void updateLEDRow(int row)
 {
-    int col;
-
-    for (col = 0; col < LED_COLS; col++)
+    for (int col = 0; col < LED_COLS; col++)
         if (led_buffer[row][col])
             setLED(rows[row], cols[col]);
 }
 
+/* Updates the entire LED buffer with given array */
 void updateLEDBuffer(const bool led_states[LED_ROWS][LED_COLS])
 {
-    int row, col;
-
-    for (row = 0; row < LED_ROWS; row++)
-        for (col = 0; col < LED_COLS; col++)
+    for (int row = 0; row < LED_ROWS; row++)
+        for (int col = 0; col < LED_COLS; col++)
             led_buffer[row][col] = led_states[row][col];
 }
 
+/* Updates the LED buffer with given digit by matchinig with BIN_DIGIT() */
 void updateBufferWithDigit(int digit)
 {
-    int row, col;
     bool led_states[LED_ROWS][LED_COLS] = { false };
 
-    for (row = 0; row < LED_ROWS; row++)
-        for (col = 0; col < LED_COLS; col++)
+    for (int row = 0; row < LED_ROWS; row++)
+        for (int col = 0; col < LED_COLS; col++)
             if (led_digits[digit][row] & BIN_DIGIT(col))
                 led_states[row][col] = true;
     updateLEDBuffer(led_states);
@@ -130,6 +137,12 @@ void initRegularTimer()
 {
     NRF_TIMER0->BITMODE = TIMER_BITMODE_BITMODE_24Bit;
     NRF_TIMER0->PRESCALER = PRESCALER_VALUE;
+    NRF_TIMER0->TASKS_START = 1;
+}
+
+void startRegularTimer()
+{
+    initRegularTimer();
     NRF_TIMER0->TASKS_START = 1;
 }
 
@@ -168,6 +181,16 @@ void delay(uint32_t delay_ms)
 
 /* ####################################  Interrupt functions  #################################### */
 
+void TIMER1_IRQHandler()
+{
+    if (NRF_TIMER1->EVENTS_COMPARE[0] == 0) return;
+
+    NRF_TIMER1->EVENTS_COMPARE[0] = 0;           // Clear match event
+    clearLEDs();
+    updateLEDRow(current_row);                   // Update current row
+    current_row = (current_row + 1) % LED_ROWS;  // Move to the next row
+}
+
 void initInterruptTimer(uint32_t interval)
 {
     NRF_TIMER1->BITMODE = TIMER_BITMODE_BITMODE_16Bit;
@@ -176,55 +199,46 @@ void initInterruptTimer(uint32_t interval)
     NRF_TIMER1->CC[0] = interval; // Set interval for compare match
 }
 
-void startInterruptTimer()
-{
-    NRF_TIMER1->TASKS_START = 1;
-}
-
-void TIMER1_IRQHandler()
-{
-    if (NRF_TIMER1->EVENTS_COMPARE[0] != 0) {
-        NRF_TIMER1->EVENTS_COMPARE[0] = 0;  // Clear match event
-        clearLEDs();
-        updateLEDRow(current_row);  // Update current row
-        current_row = (current_row + 1) % LED_ROWS;  // Move to the next row
-    }
-}
-
+/* Configure timer to enable interrupt on match */
 void configureInterrupt()
 {
-    // Enable interrupt on compare match
     NRF_TIMER1->INTENSET = TIMER_INTENSET_COMPARE0_Enabled << TIMER_INTENSET_COMPARE0_Pos;
     NVIC_SetVector(TIMER1_IRQn, (uint32_t)TIMER1_IRQHandler);
     NVIC_EnableIRQ(TIMER1_IRQn);
     NVIC_SetPriority(TIMER1_IRQn, 0);
 }
 
+void startInterruptTimer(uint32_t interval)
+{
+    initInterruptTimer(interval);
+    configureInterrupt();
+    NRF_TIMER1->TASKS_START = 1;
+}
+
 /* ####################################  String manipulation functions  #################################### */
 
+/* String reversal function */
 void reverse(char *str, int length)
 {
-    int start = 0, end = length - 1;
     char temp;
 
-    for (; start < end; start++, end--) {
+    for (int start = 0, end = length - 1; start < end; start++, end--) {
         temp = str[start];
         str[start] = str[end];
         str[end] = temp;
     }
 }
 
+/* Converts positive integers to string */
 void intToStr(char *str, int num)
 {
     int i = 0;
 
     if (num == 0) {
-        str[i++] = '0';
+        str[i++] = '0'; // Special case where num == 0 (avoid division by zero)
     } else {
-        while (num > 0) {
+        for (; num > 0; num /= 10)        // Remove rightmost digit in each iteration
             str[i++] = (num % 10) + '0';  // Convert last digit to char, add to str
-            num /= 10;  // Remove last digit
-        }
         reverse(str, i); // Reverse string because digits are added in reverse
     }
     str[i] = '\0';
@@ -252,9 +266,7 @@ void* my_memset(void* ptr, int value, size_t num)
 void showSingleNumber(int n)
 {
     updateBufferWithDigit(n);
-    initInterruptTimer(convertMsToTicks(MS_TO_10HZ));
-    configureInterrupt();
-    startInterruptTimer();
+    startInterruptTimer(convertMsToTicks(MS_TO_10HZ));
 }
 
 /**
@@ -264,22 +276,19 @@ void showSingleNumber(int n)
  */
 void showPartialDigit(int n, int start_col, bool led_states[LED_ROWS][LED_COLS])
 {
-    if (start_col > LED_COLS) return;
-
-    int row, col, led_col;
+    int led_col;
     uint8_t row_data;
 
-    for (row = 0; row < LED_ROWS; row++) {
-        // Get the binary representation of the digit for the current row
-        row_data = led_digits[n][row];
+    for (int row = 0; row < LED_ROWS; row++) {
+        row_data = led_digits[n][row];  // Digit binary representation of row
 
-        for (col = 0; col < LED_COLS; col++) {
+        for (int col = 0; col < LED_COLS; col++) {
             led_col = col + start_col;
 
-            // Skip columns that are outside the bounds of the LED matrix
-            if (led_col < 0 || led_col >= LED_COLS) continue;
+            if (led_col < 0 || led_col >= LED_COLS) // Skip out-of-bounds columns
+                continue;
 
-            // Set the LED state based on the binary representation of the digit
+            /* Set the LED state based on the binary representation of the digit */
             led_states[row][led_col] = (row_data & BIN_DIGIT(col));
         }
     }
@@ -291,34 +300,31 @@ void showPartialDigit(int n, int start_col, bool led_states[LED_ROWS][LED_COLS])
  */
 void showScrollingNumber(int n)
 {
-    int pos, len;
     int digit_start_col;
-    const uint32_t interval = convertMsToTicks(SCROLL_SPEED);
+    const uint32_t scroll_speed = convertMsToTicks(SCROLL_SPEED_IN_MS);
     bool led_states[LED_ROWS][LED_COLS] = { false };
 
-    char num_str[BUF_LEN];  // Buffer to store string representation of the number
+    /* Convert number to a string and store it to num_str[] buffer */
+    char num_str[BUF_LEN];
     intToStr(num_str, n);
     int length = my_strlen(num_str);
 
-    initInterruptTimer(convertMsToTicks(MS_TO_10HZ));
-    configureInterrupt();
-    startInterruptTimer();
+    startInterruptTimer(convertMsToTicks(MS_TO_10HZ));
+    startRegularTimer();
+    uint32_t next_time = captureTime() + scroll_speed;
 
-    initRegularTimer();
-    uint32_t next_time = captureTime() + interval;
-
-    for (pos = length * LED_COLS; pos >= -LED_COLS; pos--) {
+    for (int pos = length * LED_COLS; pos >= -LED_COLS; pos--) {
         my_memset(led_states, 0, sizeof(led_states));
-        for (len = 0; len < length; len++) {
-            // Calculate the starting column of the current digit on the LED matrix
+
+        for (int len = 0; len < length; len++) {
+            /* Calculate the starting column of the current digit on the LED matrix */
             digit_start_col = pos - (length - 1 - len) * LED_COLS;
 
-            // If the character is a digit, display it on the LED matrix
             if (num_str[len] >= '0' && num_str[len] <= '9')
                 showPartialDigit(num_str[len] - '0', digit_start_col, led_states);
         }
         delayUntil(next_time);
-        next_time += interval;
+        next_time += scroll_speed;
     }
 }
 
@@ -328,12 +334,12 @@ void beHappy()
 {
     int row, col;
 
-    while(1) {
+    while (1) {
         for (row = 0; row < LED_ROWS; row++) {
             for (col = 0; col < LED_COLS; col++)
                 if (smiley_face[row][col])
                     setLED(rows[row], cols[col]);
-            delay(convertMsToTicks(MS_TO_10HZ));
+            delay(MS_TO_10HZ);
             clearLEDs();
         }
     }
@@ -343,10 +349,11 @@ void beVeryHappy()
 {
     int row, col;
     const uint32_t interval = convertMsToTicks(MS_TO_10HZ);
-    initRegularTimer();
+
+    startRegularTimer();
     uint32_t next_time = captureTime() + interval;
 
-    while(1) {
+    while (1) {
         for (row = 0; row < LED_ROWS; row++) {
             for (col = 0; col < LED_COLS; col++)
                 if (smiley_face[row][col])
@@ -357,18 +364,17 @@ void beVeryHappy()
         }
     }
 }
+
 void beHappyAndFree()
 {
     updateLEDBuffer(smiley_face);
-    initInterruptTimer(convertMsToTicks(MS_TO_10HZ));
-    configureInterrupt();
-    startInterruptTimer();
+    startInterruptTimer(convertMsToTicks(MS_TO_10HZ));
 }
 
 void showNumber(int n)
 {
-    if (n < 0) return;  // Out of range
-
+    if (n < 0)  // Return if digit is negative
+        return;
     if (n >= 10)
         showScrollingNumber(n);
     else
@@ -376,14 +382,29 @@ void showNumber(int n)
 }
 
 #ifdef _DEBUG
-#define TEST_UINT 1817956776
+#define TEST_UINT 1234567890
+
+#ifdef _LOOPY
+void speedyScroll(int n)
+{
+    showScrollingNumber(n);
+}
+
+void loopyBoi()
+{
+    for (int i = 1; i <= 536870912; i <<= 1)
+        speedyScroll(i);
+}
+#endif
 
 int main()
 {
-    // beHappy();
+    beHappy();
     // beVeryHappy();
     // beHappyAndFree();
-    for (int i = 1; i < 200; i++)
-        showScrollingNumber(TEST_UINT);
+    // showNumber(TEST_UINT);
+
+    /* Extra funny */
+    // loopyBoi();
 }
 #endif
