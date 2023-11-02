@@ -1,7 +1,7 @@
 #include "Microbit.h"
 #include "nrf52833.h"
 
-#define _DEBUG
+// #define _DEBUG
 // #define _LOOPY
 
 #define BIT_SHIFT(n)  (uint32_t)(1 << n)
