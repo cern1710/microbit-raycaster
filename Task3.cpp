@@ -82,7 +82,62 @@ void sendByte(char byte, int delayCount)
     transmitAndDelay(true, delayCount);
 }
 
-int readAccelerometerAxis(uint8_t axisRegister)
+void myStrcpy(char *dst, const char *src)
+{
+    while (*src) {
+        *dst = *src;
+        dst++;
+        src++;
+    }
+    *dst = '\0';
+}
+
+void myStrcat(char *dst, const char *src)
+{
+    while (*dst)
+        dst++;
+    while (*src) {
+        *dst = *src;
+        dst++;
+        src++;
+    }
+    *dst = '\0';
+}
+
+void intToStr(int num, char *str)
+{
+    int i = 0;
+    bool isNegative = false;
+
+    if (num == 0) {
+        str[i++] = '0';
+    } else {
+        if (num < 0) {
+            isNegative = true;
+            num = -num; // Make the number positive for processing
+        }
+
+        // Convert number to string
+        for (; num > 0; num /= 10) {
+            str[i++] = (num % 10) + '0';
+        }
+
+        if (isNegative) {
+            str[i++] = '-';
+        }
+
+        // Reverse the string in place
+        for (int start = 0, end = i - 1; start < end; start++, end--) {
+            char temp = str[start];
+            str[start] = str[end];
+            str[end] = temp;
+        }
+    }
+
+    str[i] = '\0'; // Null-terminate the string
+}
+
+uint8_t readAccelerometerAxis(uint8_t axisRegister)
 {
     uint32_t result = 0;
 
@@ -147,18 +202,30 @@ void bitBangSerial(char *str, int delayCount)
 void showAccelerometerSample()
 {
     char output[50];
-    int x = 0, y = 1, z = 10;
+    char numStr[10];
+    int16_t x = 0, y = 1, z = 10;
 
     while (1) {
         // x = readAccelerometerAxis(X_HIGH_AXIS_REGISTER) << 8 | readAccelerometerAxis(X_LOW_AXIS_REGISTER);
         // y = readAccelerometerAxis(Y_HIGH_AXIS_REGISTER) << 8 | readAccelerometerAxis(Y_LOW_AXIS_REGISTER);
         // z = readAccelerometerAxis(Z_HIGH_AXIS_REGISTER) << 8 | readAccelerometerAxis(Z_LOW_AXIS_REGISTER);
-        snprintf(output, sizeof(output), "[X: %d] [Y: %d] [Z: %d]\r\n", x, y, z);
+        intToStr(x, numStr);
+        myStrcpy(output, "[X: ");
+        myStrcat(output, numStr);
+        myStrcat(output, "] ");
+
+        intToStr(y, numStr);
+        myStrcat(output, "[Y: ");
+        myStrcat(output, numStr);
+        myStrcat(output, "] ");
+
+        intToStr(z, numStr);
+        myStrcat(output, "[Z: ");
+        myStrcat(output, numStr);
+        myStrcat(output, "]\r\n");
+
         bitBangSerial(output, DELAY_11520_BAUD);
         delayMilliseconds(200);  // 200 ms delay
-        x++;
-        y--;
-        z *= 2;
     }
 }
 
