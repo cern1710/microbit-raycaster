@@ -13,39 +13,35 @@ void initGPIO()
     NRF_P0->OUTSET = (1UL << SERIAL_TX_PIN);
 }
 
-void delay(int i)
+void delay()
 {
-    volatile int delayCount = i;
-
+    volatile int delayCount = 75; // approx 75 to 81
     while (delayCount--);
 }
 
-void setTxPin(bool level)
+void transmitAndDelay(bool level)
 {
     if (level)
         NRF_P0->OUTSET = (1UL << SERIAL_TX_PIN);
     else
         NRF_P0->OUTCLR = (1UL << SERIAL_TX_PIN);
+    delay();
 }
 
-void sendByte(char byte, int k)
+void sendByte(char byte)
 {
-    setTxPin(false);
-    delay(k);
+    transmitAndDelay(false);
 
-    for (int i = 0; i < 8; i++) {
-        setTxPin((byte >> i) & 0x01);
-        delay(k);
-    }
+    for (int i = 0; i < 8; i++)
+        transmitAndDelay((byte >> i) & 0x01);
 
-    setTxPin(true);
-    delay(k);
+    transmitAndDelay(true);
 }
 
-void bitBangSerial(char *str, int i)
+void bitBangSerial(char *str)
 {
     while (*str)
-        sendByte(*str++, i);
+        sendByte(*str++);
 }
 
 #ifdef _DEBUG
@@ -58,9 +54,7 @@ int main() {
     strncpy(string, STRING_LITERAL, STRING_SIZE);
 
     initGPIO();
-
-    // approx 75-81?
-    bitBangSerial(string, 81);
+    bitBangSerial(string);
 }
 
 #endif
