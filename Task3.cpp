@@ -3,16 +3,19 @@
 
 #define _DEBUG
 
-#define SCL_PIN 26
-#define SDA_PIN 27
+#define SCL_PIN 8
+#define SDA_PIN 16
+
+#define MMIO32(addr)    (*(volatile uint32_t *)(addr))
 
 #define SERIAL_TX_PIN   6
 #define CLOCK_SPEED     64000000
 #define TARGET_BAUD     115200
 
-#define TWI_FREQ_250_KBPS  (0x04000000UL)
+#define TWI_FREQ_100_KBPS  0x01980000
+#define TWI_FREQ_250_KBPS  0x04000000
 
-#define ACCEL_I2C_ADDRESS   0x32
+#define ACCEL_I2C_ADDRESS   0x19
 
 #define X_LOW_AXIS_REGISTER 0x28
 #define Y_LOW_AXIS_REGISTER 0x2A
@@ -20,6 +23,9 @@
 #define X_HIGH_AXIS_REGISTER 0x29
 #define Y_HIGH_AXIS_REGISTER 0x2B
 #define Z_HIGH_AXIS_REGISTER 0x2D
+
+#define TWI_DISABLE     0
+#define TWI_ENABLE      5
 
 void bitBangSerial(char *str, int delayCount);
 
@@ -136,42 +142,45 @@ void intToStr(int num, char *str)
     str[i] = '\0'; // Null-terminate the string
 }
 
-uint8_t readAccelerometerAxis(uint8_t axisRegister)
+void configureI2C()
+{
+    NRF_P0->PIN_CNF[SCL_PIN] = 0x00000600;
+    NRF_P0->PIN_CNF[SDA_PIN] = 0x00000600;
+
+    NRF_TWI0->PSEL.SCL = SCL_PIN;
+    NRF_TWI0->PSEL.SDA = SDA_PIN;
+
+    NRF_TWI0->ADDRESS = ACCEL_I2C_ADDRESS;
+    NRF_TWI0->FREQUENCY = TWI_FREQ_250_KBPS;
+    NRF_TWI0->SHORTS = 1;   // Suspend the peripheral after every byte
+}
+
+uint8_t readAccelerometerData(uint32_t axisRegister)
 {
     uint8_t result = 0;
 
-    // Disable the TWI peripheral
-    NRF_TWI0->ENABLE = 0;
+    NRF_TWI0->ENABLE = TWI_DISABLE;
 
     // Configure SCL and SDA pin modes for I2C
     NRF_P0->PIN_CNF[SCL_PIN] = 0x00000600;
     NRF_P0->PIN_CNF[SDA_PIN] = 0x00000600;
 
-    // Select the pin numbers associated with the internal I2C SCL and SDA lines
     NRF_TWI0->PSEL.SCL = SCL_PIN;
     NRF_TWI0->PSEL.SDA = SDA_PIN;
 
-    // Set the I2C Address of the accelerometer and bus speed
     NRF_TWI0->ADDRESS = ACCEL_I2C_ADDRESS;
     NRF_TWI0->FREQUENCY = TWI_FREQ_250_KBPS;
-
-    // Suspend the peripheral after every byte
-    NRF_TWI0->SHORTS = 1;
+    NRF_TWI0->SHORTS = 1;   // Suspend the peripheral after every byte
 
     // Reset I2C flags
     resetI2CFlags();
 
-    // Enable the TWI peripheral
-    NRF_TWI0->ENABLE = 1;
-
-    // Address of the desired axis register inside the accelerometer
-    NRF_TWI0->TXD = axisRegister;
-
-    // Start an I2C write transaction
-    NRF_TWI0->TASKS_STARTTX = 1;
+    NRF_TWI0->ENABLE = TWI_ENABLE;
+    NRF_TWI0->TXD = axisRegister;   // Desired axis register in accelerometer
+    NRF_TWI0->TASKS_STARTTX = 1;    // Start an I2C write transaction
 
     // Wait for data to be sent
-    while (NRF_TWI0->EVENTS_TXDSENT == 0);  // this part
+    while (NRF_TWI0->EVENTS_TXDSENT == 0);
     NRF_TWI0->EVENTS_TXDSENT = 0;
 
     // Start receiving
@@ -192,6 +201,36 @@ uint8_t readAccelerometerAxis(uint8_t axisRegister)
     return result;
 }
 
+void writeAccelerometerData(uint32_t axisRegister, uint32_t byte)
+{
+    NRF_TWI0->ENABLE = TWI_DISABLE;
+
+    // Reset I2C flags
+    resetI2CFlags();
+
+    NRF_TWI0->ENABLE = TWI_ENABLE;
+    NRF_TWI0->TXD = axisRegister;   // Desired axis register in accelerometer
+    NRF_TWI0->TASKS_STARTTX = 1;    // Start an I2C write transaction
+
+    while (NRF_TWI0->EVENTS_TXDSENT == 0);
+    NRF_TWI0->EVENTS_TXDSENT = 0;
+
+    NRF_TWI0->TXD = byte;
+    NRF_TWI0->TASKS_RESUME = 1;
+
+    while (NRF_TWI0->EVENTS_TXDSENT == 0);
+    NRF_TWI0->EVENTS_TXDSENT = 0;
+
+    NRF_TWI0->TASKS_RESUME = 1;
+    NRF_TWI0->TASKS_STARTRX = 1;
+
+    while (NRF_TWI0->EVENTS_RXDREADY == 0);
+    NRF_TWI0->EVENTS_RXDREADY = 0;
+
+    NRF_TWI0->TASKS_RESUME = 1;
+    NRF_TWI0->TASKS_STOP = 1;
+}
+
 void bitBangSerial(char *str, int delayCount)
 {
     while (*str)
@@ -200,31 +239,50 @@ void bitBangSerial(char *str, int delayCount)
 
 void showAccelerometerSample()
 {
+    writeAccelerometerData(0x20, 0x67);
+    writeAccelerometerData(0x23, 8);
     char output[50];
     char numStr[10];
-    int16_t x = 0, y = 1, z = 10;
+    int16_t x, x1, x2;
+    int16_t y, y1, y2;
+    int16_t z, z1, z2;
 
     while (1) {
-        x = readAccelerometerAxis(X_HIGH_AXIS_REGISTER) << 8 | readAccelerometerAxis(X_LOW_AXIS_REGISTER);
-        y = readAccelerometerAxis(Y_HIGH_AXIS_REGISTER) << 8 | readAccelerometerAxis(Y_LOW_AXIS_REGISTER);
-        z = readAccelerometerAxis(Z_HIGH_AXIS_REGISTER) << 8 | readAccelerometerAxis(Z_LOW_AXIS_REGISTER);
+        x1 = readAccelerometerData(X_HIGH_AXIS_REGISTER) << 8;
+        delayMilliseconds(1);
+        x2 = readAccelerometerData(X_LOW_AXIS_REGISTER);
+        x = (int16_t)((x1 | x2) >> 5);
+        delayMilliseconds(1);
         intToStr(x, numStr);
         myStrcpy(output, "[X: ");
         myStrcat(output, numStr);
         myStrcat(output, "] ");
+        delayMilliseconds(1);
 
+        y1 = readAccelerometerData(Y_HIGH_AXIS_REGISTER) << 8;
+        delayMilliseconds(1);
+        y2 = readAccelerometerData(Y_LOW_AXIS_REGISTER);
+        y = (int16_t)((y1 | y2) >> 5);
+        delayMilliseconds(1);
         intToStr(y, numStr);
         myStrcat(output, "[Y: ");
         myStrcat(output, numStr);
         myStrcat(output, "] ");
+        delayMilliseconds(1);
 
+        z1 = readAccelerometerData(Z_HIGH_AXIS_REGISTER) << 8;
+        delayMilliseconds(1);
+        z2 = readAccelerometerData(Z_LOW_AXIS_REGISTER);
+        z = (int16_t)((z1 | z2) >> 5);
+        delayMilliseconds(1);
         intToStr(z, numStr);
         myStrcat(output, "[Z: ");
         myStrcat(output, numStr);
         myStrcat(output, "]\r\n");
+        delayMilliseconds(1);
 
         bitBangSerial(output, DELAY_11520_BAUD);
-            delayMilliseconds(200);  // 200 ms delay
+        delayMilliseconds(200);  // 200 ms delay
     }
 }
 
@@ -238,6 +296,7 @@ int main()
     char string[STRING_SIZE];
     strncpy(string, STRING_LITERAL, STRING_SIZE);
     initGPIO();
+    configureI2C();
 
     // bitBangSerial(string, DELAY_11520_BAUD);
     showAccelerometerSample();
