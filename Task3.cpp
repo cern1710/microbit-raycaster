@@ -1,7 +1,7 @@
 #include "Microbit.h"
 #include "nrf52833.h"
 
-#define _DEBUG
+// #define _DEBUG
 
 #define SCL_PIN         8
 #define SDA_PIN         16
