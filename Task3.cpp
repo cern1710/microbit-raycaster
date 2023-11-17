@@ -244,8 +244,8 @@ void configureI2C()
 
 void configureAccelerometer()
 {
-    writeAccelerometerData(ACCEL_CTRL_REG1, 0x97);
-    writeAccelerometerData(ACCEL_CTRL_REG4, 0x08);
+    writeAccelerometerData(ACCEL_CTRL_REG1, CTRL_REG1_CONFIG);
+    writeAccelerometerData(ACCEL_CTRL_REG4, CTRL_REG4_CONFIG);
 }
 
 /* #####################################  Task functions  ###################################### */
