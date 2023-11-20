@@ -6,6 +6,7 @@
 #define SCL_PIN         8
 #define SDA_PIN         16
 #define SERIAL_TX_PIN   6
+#define PIN_CNF_S0D1    0x00000600
 
 #define TWI_DISABLE         0
 #define TWI_ENABLE          5
@@ -25,7 +26,7 @@
 #define Y_HIGH_AXIS_REGISTER 0x2B
 #define Z_HIGH_AXIS_REGISTER 0x2D
 
-#define CONCAT_REGISTERS(high, low) ((int16_t)(((high) | (low)) >> 5))
+#define CONCAT_REGISTERS(high, low) ((int16_t)((int16_t)((high) | (low)) >> 4))
 
 /**
  * Rough approximation of number of loop iterations to approximate 1 ms.
@@ -163,8 +164,6 @@ void sendByte(char byte, int delay_count)
     transmitLevel(true, delay_count);
 }
 
-/* ################################  Accelerometer functions  ################################## */
-
 void initI2CTransaction(uint32_t register_value)
 {
     NRF_TWI0->ENABLE = TWI_DISABLE;
@@ -174,10 +173,10 @@ void initI2CTransaction(uint32_t register_value)
     NRF_TWI0->TASKS_STARTTX = 1;    // Start I2C Transaction
 }
 
-void waitEvent(volatile uint32_t* event)
+void startI2CTransaction()
 {
-    while (*event == 0);
-    *event = 0;
+    NRF_TWI0->TASKS_RESUME = 1;
+    NRF_TWI0->TASKS_STARTRX = 1;
 }
 
 void endI2CTransaction()
@@ -186,22 +185,27 @@ void endI2CTransaction()
     NRF_TWI0->TASKS_STOP = 1;
 }
 
+/* ################################  Accelerometer functions  ################################## */
+
+void waitEvent(volatile uint32_t* event)
+{
+    while (*event == 0);
+    *event = 0;
+}
+
 /* Reads a value from desired register in the accelerometer */
 uint8_t readAccelerometerData(uint32_t read_register)
 {
-    uint8_t result = 0;
-
     delay(1);   // Prevents program from being stuck waiting for event
     initI2CTransaction(read_register);
 
     waitEvent(&NRF_TWI0->EVENTS_TXDSENT);
-    NRF_TWI0->TASKS_RESUME = 1;
-    NRF_TWI0->TASKS_STARTRX = 1;
+    startI2CTransaction();
 
     waitEvent(&NRF_TWI0->EVENTS_RXDREADY);
-    result = NRF_TWI0->RXD;
     endI2CTransaction();
-    return result;
+
+    return NRF_TWI0->RXD;
 }
 
 /* Writes a value to desired register in the accelerometer */
@@ -214,8 +218,7 @@ void writeAccelerometerData(uint32_t write_register, uint32_t byte)
     NRF_TWI0->TASKS_RESUME = 1;
 
     waitEvent(&NRF_TWI0->EVENTS_TXDSENT);
-    NRF_TWI0->TASKS_RESUME = 1;
-    NRF_TWI0->TASKS_STARTRX = 1;
+    startI2CTransaction();
 
     waitEvent(&NRF_TWI0->EVENTS_RXDREADY);
     endI2CTransaction();
@@ -231,8 +234,8 @@ void configureGPIO()
 
 void configureI2C()
 {
-    NRF_P0->PIN_CNF[SCL_PIN] = 0x00000600;
-    NRF_P0->PIN_CNF[SDA_PIN] = 0x00000600;
+    NRF_P0->PIN_CNF[SCL_PIN] = PIN_CNF_S0D1;
+    NRF_P0->PIN_CNF[SDA_PIN] = PIN_CNF_S0D1;
 
     NRF_TWI0->PSEL.SCL = SCL_PIN;
     NRF_TWI0->PSEL.SDA = SDA_PIN;
@@ -303,7 +306,8 @@ int main()
     char small[SMALL_SIZE];
     strncpy(small, SMALL_STRING, SMALL_SIZE);
 
-    // bitBangSerial(small);
+    while(1)
+        bitBangSerial(small);
     showAccelerometerSample();
 }
 
