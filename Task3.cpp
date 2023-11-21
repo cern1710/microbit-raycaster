@@ -1,11 +1,11 @@
 #include "Microbit.h"
 #include "nrf52833.h"
 
-// #define _DEBUG
+#define _DEBUG
 
 #define SCL_PIN         8
 #define SDA_PIN         16
-#define SERIAL_TX_PIN   6
+#define SERIAL_TX_PIN   2
 #define PIN_CNF_S0D1    0x00000600
 
 #define TWI_DISABLE         0
@@ -308,7 +308,7 @@ int main()
 
     while(1)
         bitBangSerial(small);
-    showAccelerometerSample();
+    // showAccelerometerSample();
 }
 
 #endif
