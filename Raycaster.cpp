@@ -13,8 +13,8 @@ MicroBit uBit;
 
 #define MAP_WIDTH   	24
 #define MAP_HEIGHT  	24
-#define SCREEN_WIDTH    160
-#define SCREEN_HEIGHT   128
+#define SCREEN_WIDTH    128
+#define SCREEN_HEIGHT   160
 
 #define RED     0xFC00
 #define GREEN   0x001F
@@ -64,6 +64,7 @@ void setColor(ManagedBuffer buf, uint16_t value, int offset)
 int main()
 {
 	uBit.init();
+	uBit.sleep(500);
 
 	ManagedBuffer img(SCREEN_WIDTH * SCREEN_HEIGHT * 2);
     Adafruit_ST7735 *lcd = new Adafruit_ST7735(LCD_PIN_CS, LCD_PIN_DC, LCD_PIN_RST,
@@ -148,20 +149,40 @@ int main()
 			if (drawEnd >= h) drawEnd = h - 1;
 
 			// Add wall colour here
-			switch (worldMap[mapX][mapY]) {
-				case 1:  color = RED;     break;
-				case 2:  color = GREEN;	  break;
-				case 3:  color = BLUE;	  break;
-				case 4:  color = WHITE;	  break;
-				default: color = YELLOW;  break;
-			}
-			setColor(img, BLUE, 0);
-
-			// draw pixels of stripe as vertical line
-			lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
+			// switch (worldMap[mapX][mapY]) {
+			// 	case 1:  color = RED;     break;
+			// 	case 2:  color = GREEN;	 break;
+			// 	case 3:  color = BLUE;	 break;
+			// 	case 4:  color = ST77XX_WHITE;	 break;
+			// 	default: color = ST77XX_YELLOW;  break;
+			// }
 		}
 		prev_time = current_time;
 		// get Ticks here
 		frameRate = 1000.0 / (current_time - prev_time);
+
+        if (color == 0)
+        {
+            uBit.serial.printf("  GREEN...");
+            setColor(img, GREEN, 0);
+        }
+
+        if (color == 1)
+        {
+            uBit.serial.printf("  RED...");
+            setColor(img, RED, 0);
+        }
+
+        if (color == 2)
+        {
+            uBit.serial.printf("  BLUE...");
+            setColor(img, BLUE, 0);
+        }
+
+		color++;
+		if (color == 3)
+			color = 0;
+		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
+		uBit.sleep(500);
 	}
 }
