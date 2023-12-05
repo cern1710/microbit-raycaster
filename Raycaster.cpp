@@ -3,7 +3,7 @@
 
 MicroBit uBit;
 
-// // Define the MICROBIT EDGE CONNECTOR pins where the display is connected...
+// Define the MICROBIT EDGE CONNECTOR pins where the display is connected...
 #define LCD_PIN_CS      2
 #define LCD_PIN_DC      1
 #define LCD_PIN_RST     0
@@ -20,8 +20,10 @@ MicroBit uBit;
 #define GREEN   0x001F
 #define BLUE    0x03E0
 #define WHITE	0xFFFF
-#define YELLOW	0xFFE0
+#define YELLOW	0xFEE0
 #define BLACK 	0x0000
+
+#define MAX_VIEW_DISTANCE	5
 
 int worldMap[MAP_WIDTH][MAP_HEIGHT]=
 {
@@ -116,7 +118,6 @@ int main()
 	int lineHeight;
 	int drawStart, drawEnd;
 	int color = 0;
-	int prevColor = 0;
 
     // Register the button A press event handler
     uBit.messageBus.listen(MICROBIT_ID_BUTTON_A, MICROBIT_BUTTON_EVT_CLICK, onButtonA);
@@ -129,12 +130,6 @@ int main()
             img[i] = BLACK & 0xFF;
             img[i + 1] = (BLACK >> 8) & 0xFF;
         }
-        if (isButtonPressedA) {
-			if(worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false) posX += dirX * moveSpeed;
-			if(worldMap[int(posX)][int(posY + dirY * moveSpeed)] == false) posY += dirY * moveSpeed;
-			isButtonPressedA = false;
-        }
-
 		for (int x = 0; x < w; x++) {
 			cameraX = (2 * x) / (double)w - 1;
 			rayDirX = dirX + (planeX * cameraX);
@@ -195,40 +190,39 @@ int main()
 				default: color = YELLOW;  break;
 			}
 			if (side == 1) {
-				int red = ((color & 0xF800) >> 1) | 0x0800;
+				int red = ((color & 0xF800) >> 1) | 0x0400;
 				int green = ((color & 0x07E0) >> 1) | 0x0040;
 				int blue = ((color & 0x001F) >> 1) | 0x0001;
 
 				color = (red & 0xF800) | (green & 0x07E0) | (blue & 0x001F);
 			}
+			// Apply distance shading (this is cooked)
+			// float shade = 1.0 - (perpWallDist / MAX_VIEW_DISTANCE);
+			// shade = (shade < 0.3) ? 0.3 : shade; // Clamp minimum shade
 
-			// anti-aliasing
-			// if (x > 0) { // Skip averaging for the first column
-			// 	int avgRed = ((color & 0xF800) + (prevColor & 0xF800)) >> 1;
-			// 	int avgGreen = ((color & 0x07E0) + (prevColor & 0x07E0)) >> 1;
-			// 	int avgBlue = ((color & 0x001F) + (prevColor & 0x001F)) >> 1;
+			// int red = (int)((((color & 0xF800) >> 11) * shade)) << 11;
+			// int green = (int)((((color & 0x07E0) >> 5) * shade)) << 5;
+			// int blue = (color & 0x001F) * shade;
 
-			// 	int avgColor = (avgRed & 0xF800) | (avgGreen & 0x07E0) | (avgBlue & 0x001F);
-
-			// 	// Draw vertical line with the averaged color
-			// 	verticalLine(img, x, drawStart, drawEnd, avgColor);
-			// } else {
-			// 	// Draw vertical line with the original color for the first column
-				verticalLine(img, x, drawStart, drawEnd, color);
-			// }
-
-			// Update the previous color
-			prevColor = color;
+			// color = red | green | blue;
+			verticalLine(img, x, drawStart, drawEnd, color);
 		}
 		endTime = system_timer_current_time();
-		// get Ticks here
 		frameTime = (endTime - startTime) / 1000.0;
 
-		moveSpeed = frameTime * 15.0; //the constant value is in squares/second
-    	rotSpeed = frameTime * 9.0; //the constant value is in radians/second
+		moveSpeed = frameTime * 5.0; //the constant value is in squares/second
+    	rotSpeed = frameTime * 3.0; //the constant value is in radians/second
 
 		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
-		if (isButtonPressedB) {
+
+        if (uBit.buttonA.isPressed()) {
+			if(worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false)
+				posX += dirX * moveSpeed;
+			if(worldMap[int(posX)][int(posY + dirY * moveSpeed)] == false)
+				posY += dirY * moveSpeed;
+			isButtonPressedA = false;
+        }
+		if (uBit.buttonB.isPressed()) {
 			//both camera direction and camera plane must be rotated
 			double oldDirX = dirX;
 			dirX = dirX * cos(-rotSpeed) - dirY * sin(-rotSpeed);
@@ -238,7 +232,6 @@ int main()
 			planeY = oldPlaneX * sin(-rotSpeed) + planeY * cos(-rotSpeed);
 			isButtonPressedB = false;
 		}
-		// uBit.sleep(50);
 	}
 
 }
