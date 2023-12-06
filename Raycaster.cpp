@@ -111,15 +111,15 @@ int main()
 			int ycolor = y - y * 32 / TEX_HEIGHT;
 			int xycolor = y * 16 / TEX_HEIGHT + x * 16 / TEX_WIDTH;
 
-			texture[0][TEX_WIDTH * y + x] = (31 * (x != y && x != TEX_WIDTH - y)) << 11; // Red with black cross
+			texture[0][TEX_WIDTH * y + x] = (20 * (x != y && x != TEX_WIDTH - y)) << 11; // Red with black cross
 			texture[1][TEX_WIDTH * y + x] = xycolor << 11 | xycolor << 6 | xycolor; // Sloped greyscale
-			texture[2][TEX_WIDTH * y + x] = xycolor << 11 | xycolor << 6; // Sloped yellow gradient
+			texture[2][TEX_WIDTH * y + x] = xycolor << 6 | xycolor; // Sloped yellow gradient
 			texture[3][TEX_WIDTH * y + x] = xorcolor << 11 | xorcolor << 6 | xorcolor; // XOR greyscale
-			texture[4][TEX_WIDTH * y + x] = xorcolor << 5; // XOR green
+			texture[4][TEX_WIDTH * y + x] = xorcolor; // XOR green
 			texture[5][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)) << 11; // Red bricks
 			texture[6][TEX_WIDTH * y + x] = ycolor << 11; // Red gradient
 			texture[7][TEX_WIDTH * y + x] = 16 + 16*32 + 24*2048; // Flat grey texture
-			texture[8][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)); // Green bricks
+			texture[8][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)); // Green bricks
 		}
 	}
 
