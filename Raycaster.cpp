@@ -51,19 +51,6 @@ int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 	{4,4,4,4,4,4,4,4,4,4,1,1,1,2,2,2,2,2,2,3,3,3,3,3}
 };
 
-bool isButtonPressedA = false;
-bool isButtonPressedB = false;
-
-void onButtonA(MicroBitEvent)
-{
-    isButtonPressedA = true;
-}
-
-void onButtonB(MicroBitEvent)
-{
-    isButtonPressedB = true;
-}
-
 int main()
 {
 	uBit.init();
@@ -104,9 +91,7 @@ int main()
 	int reducedLineHeight;
 	int reducedDrawStart, reducedDrawEnd;
 
-    // Register the button A press event handler
-    uBit.messageBus.listen(MICROBIT_ID_BUTTON_A, MICROBIT_BUTTON_EVT_CLICK, onButtonA);
-    uBit.messageBus.listen(MICROBIT_ID_BUTTON_B, MICROBIT_BUTTON_EVT_CLICK, onButtonB);
+	float rayDirX0, rayDirY0, rayDirX1, rayDirY1;
 
 	std::vector<int16_t> texture[9];
 	for(int i = 0; i < 9; i++)
@@ -130,6 +115,7 @@ int main()
 			texture[8][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)); // Green bricks
 		}
 	}
+
 	// Create mipmaps for each texture
 	// std::vector<int16_t> textureMipmaps[9];
 	// int MIPMAP_LEVELS = 3; // Number of mip levels
@@ -153,16 +139,13 @@ int main()
 		// Floor casting
 		for (int y = h / 2 + 1; y < h; ++y) {
 			// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
-			float rayDirX0 = dirX - planeX;
-			float rayDirY0 = dirY - planeY;
-			float rayDirX1 = dirX + planeX;
-			float rayDirY1 = dirY + planeY;
+			rayDirX0 = dirX - planeX;
+			rayDirY0 = dirY - planeY;
+			rayDirX1 = dirX + planeX;
+			rayDirY1 = dirY + planeY;
 
-			// Current y position compared to the center of the screen (the horizon)
-			int p = y - h / 2;
-
-			// Vertical position of the camera.
-			float posZ = 0.5 * h;
+			int p = y - h / 2; 	  // Current y-coord compared to horizon
+			float posZ = 0.5 * h; // Vertical position of the camera.
 
 			// Horizontal distance from the camera to the floor for the current row.
 			// 0.5 is the z position exactly in the middle between floor and ceiling.
@@ -315,7 +298,6 @@ int main()
 				posX += dirX * moveSpeed;
 			if(worldMap[int(posX)][int(posY + dirY * moveSpeed)] == false)
 				posY += dirY * moveSpeed;
-			isButtonPressedA = false;
         }
 		if (uBit.buttonB.isPressed()) {
 			//both camera direction and camera plane must be rotated
@@ -325,7 +307,6 @@ int main()
 			double oldPlaneX = planeX;
 			planeX = planeX * cos(-rotSpeed) - planeY * sin(-rotSpeed);
 			planeY = oldPlaneX * sin(-rotSpeed) + planeY * cos(-rotSpeed);
-			isButtonPressedB = false;
 		}
 	}
 }
