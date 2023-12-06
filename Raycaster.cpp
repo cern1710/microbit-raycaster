@@ -98,6 +98,7 @@ int main()
 		texture[i].resize(TEX_WIDTH * TEX_HEIGHT);
 
 	// NOTE: color representation is R-B-G!!!
+	// Used for texture mapping
 	for (int x = 0; x < TEX_WIDTH; x++) {
 		for (int y = 0; y < TEX_HEIGHT; y++) {
 			int xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
@@ -136,7 +137,7 @@ int main()
 	while(1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
 
-		// Floor casting
+		// Floor casting (horizontal scanline)
 		for (int y = h / 2 + 1; y < h; ++y) {
 			// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
 			rayDirX0 = dirX - planeX;
@@ -160,6 +161,7 @@ int main()
 			float floorX = posX + rowDistance * rayDirX0;
 			float floorY = posY + rowDistance * rayDirY0;
 
+			// Linear interpolation for texture mapping
 			for(int x = 0; x < w; ++x) {
 				// the cell coord is simply got from the integer parts of floorX and floorY
 				int cellX = (int)(floorX);
@@ -194,6 +196,7 @@ int main()
 			mapX = int(posX);
 			mapY = int(posY);
 
+			// Length of ray from current position to next x or y-side
 			deltaX = (rayDirX == 0) ? 1e30 : abs(1 / rayDirX);
 			deltaY = (rayDirY == 0) ? 1e30 : abs(1 / rayDirY);
 
@@ -214,8 +217,9 @@ int main()
 				sideDistY = (mapY + 1.0 - posY) * deltaY;
 			}
 
-			// Perform DDA
+			// Digital differential analyzer (DDA) algorithm
 			while (hit == 0) {
+				// Jump to next map square in either x or y direction
 				if (sideDistX < sideDistY) {
 					sideDistX += deltaX;
 					mapX += stepX;
@@ -230,22 +234,23 @@ int main()
 			}
 
 			perpWallDist = (side == 0) ? (sideDistX - deltaX) :
-							(sideDistY - deltaY);
-			lineHeight = (int)(h / perpWallDist);
+							(sideDistY - deltaY);	// Calculate distance of perpendicular ray
+			lineHeight = (int)(h / perpWallDist);	// Calculate height of line to draw on screen
 
-			pitch = 0;
+			// Calculate lowest and highest pixel to fill in current stripe
+			pitch = 5;
 			drawStart = -(lineHeight / 2) + (h / 2) + pitch;
 			drawEnd = (lineHeight / 2) + (h / 2) + pitch;
 			if (drawStart < 0) drawStart = 0;
 			if (drawEnd >= h) drawEnd = h - 1;
 
-			texNum = worldMap[mapX][mapY] - 1;
+			texNum = worldMap[mapX][mapY] - 1;	// Subtract 1 to use texture 0
 
 			wallX = (side == 0) ? posY + perpWallDist * rayDirY :
 			 		posX + perpWallDist * rayDirX;
-			wallX -= floor(wallX); // Remove the integer part
+			wallX -= floor(wallX); // Where is the wall hit
 
-			texX = int(wallX * double(TEX_WIDTH));
+			texX = int(wallX * double(TEX_WIDTH));	// X-coordinate of texture
 			if(side == 0 && rayDirX > 0) texX = TEX_WIDTH - texX - 1;
 			if(side == 1 && rayDirY < 0) texX = TEX_WIDTH - texX - 1;
 			double step = 1.0 * TEX_HEIGHT / lineHeight;
