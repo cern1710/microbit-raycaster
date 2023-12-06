@@ -19,6 +19,10 @@ MicroBit uBit;
 #define SCREEN_WIDTH    128
 #define SCREEN_HEIGHT   160
 
+#define FLOOR_TEXTURE	0
+#define CEILING_TEXTURE	8
+#define DISTANCE_THRESHOLD 8
+
 int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 {
 	{4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,7,7,7,7,7,7,7,7},
@@ -88,6 +92,7 @@ int main()
 	int mapX, mapY;
 	int stepX, stepY;
 	int hit, side;
+	int texX, texY;
 	int w = SCREEN_HEIGHT;
 	int h = SCREEN_WIDTH;
 	int lineHeight;
@@ -95,6 +100,9 @@ int main()
 	int16_t color = 0;
 	int pitch;
 	int texNum;
+	uint16_t *p;
+	int reducedLineHeight;
+	int reducedDrawStart, reducedDrawEnd;
 
     // Register the button A press event handler
     uBit.messageBus.listen(MICROBIT_ID_BUTTON_A, MICROBIT_BUTTON_EVT_CLICK, onButtonA);
@@ -118,10 +126,26 @@ int main()
 			texture[4][TEX_WIDTH * y + x] = xorcolor; // XOR green
 			texture[5][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)) << 11; // Red bricks
 			texture[6][TEX_WIDTH * y + x] = ycolor << 11; // Red gradient
-			texture[7][TEX_WIDTH * y + x] = 16 + 16*32 + 24*2048; // Flat grey texture
+			texture[7][TEX_WIDTH * y + x] = 16 + 16*32 + 16*2048; // Flat grey texture
 			texture[8][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)); // Green bricks
 		}
 	}
+	// Create mipmaps for each texture
+	// std::vector<int16_t> textureMipmaps[9];
+	// int MIPMAP_LEVELS = 3; // Number of mip levels
+	// for (int t = 0; t < 9; ++t) {
+	// 	for (int mip = 0; mip < MIPMAP_LEVELS; ++mip) {
+	// 		int mipWidth = TEX_WIDTH >> mip;
+	// 		int mipHeight = TEX_HEIGHT >> mip;
+	// 		textureMipmaps[t].resize(mipWidth * mipHeight);
+	// 		// Create mipmaps (simplified example, consider averaging neighboring pixels)
+	// 		for (int y = 0; y < mipHeight; ++y) {
+	// 			for (int x = 0; x < mipWidth; ++x) {
+	// 				textureMipmaps[t][mipWidth * y + x] = texture[t][TEX_WIDTH * (y << mip) + (x << mip)];
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	while(1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
@@ -165,24 +189,19 @@ int main()
 				floorX += floorStepX;
 				floorY += floorStepY;
 
-				// choose texture and draw the pixel
-				int floorTexture = 0;
-				int ceilingTexture = 8;
-				int16_t color;
-
-				// floor
-				color = texture[floorTexture][TEX_WIDTH * ty + tx];
+				color = texture[FLOOR_TEXTURE][TEX_WIDTH * ty + tx];
 				color = (color >> 1) & 0x7BEF; // make a bit darker
 				uint16_t *p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + y);
                 *p = color; // Update the buffer at position (x, y)
 
 				//ceiling (symmetrical, at screenHeight - y - 1 instead of y)
-				color = texture[ceilingTexture][TEX_WIDTH * ty + tx];
+				color = texture[CEILING_TEXTURE][TEX_WIDTH * ty + tx];
 				color = (color >> 1) & 0x7BEF; // make a bit darker
 				p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + SCREEN_WIDTH - y - 1);
                 *p = color; // Update the buffer at position (x, y)
 			}
 		}
+
 		// Wall casting
 		for (int x = 0; x < w; x++) {
 			cameraX = (2 * x) / (double)w - 1;
@@ -243,22 +262,45 @@ int main()
 			 		posX + perpWallDist * rayDirX;
 			wallX -= floor(wallX); // Remove the integer part
 
-			int texX = int(wallX * double(TEX_WIDTH));
+			texX = int(wallX * double(TEX_WIDTH));
 			if(side == 0 && rayDirX > 0) texX = TEX_WIDTH - texX - 1;
 			if(side == 1 && rayDirY < 0) texX = TEX_WIDTH - texX - 1;
 			double step = 1.0 * TEX_HEIGHT / lineHeight;
 			double texPos = (drawStart - pitch - h / 2 + lineHeight / 2) * step;
 
-			for (int y = drawStart; y < drawEnd; y++) {
-				// Cast the texture coordinate to integer, and mask with (texHeight - 1) in case of overflow
-				int texY = (int)texPos & (TEX_HEIGHT - 1);
-				texPos += step;
-				color = texture[texNum][TEX_WIDTH * texY + texX];
-				//make color darker for y-sides: R, G and B byte each divided through two with a "shift" and an "and"
-				// if (side == 1)
-				// 	color = ((color >> 1) & 0xFFEF);
-                uint16_t *p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + y);
-                *p = color; // Update the buffer at position (x, y)
+			p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH);
+			if (perpWallDist < DISTANCE_THRESHOLD) {
+				// Render the wall normally for closer walls
+				for (int y = drawStart; y < drawEnd; y++) {
+					// Cast the texture coordinate to integer, and mask with (texHeight - 1) in case of overflow
+					texY = (int)texPos & (TEX_HEIGHT - 1);
+					texPos += step;
+					color = texture[texNum][TEX_WIDTH * texY + texX];
+					//make color darker for y-sides:
+					// R, G and B byte each divided through two with a "shift" and an "and"
+					if (side == 1)
+						color = ((color >> 1) & 0xFFEF);
+					*(p + y) = color; // Update the buffer at position (x, y)
+				}
+			} else {
+				// Render the wall with less detail for distant walls
+				reducedLineHeight = lineHeight / 2; // Reduce the line height for distant walls
+				reducedDrawStart = drawStart + reducedLineHeight / 2;
+				reducedDrawEnd = drawEnd - reducedLineHeight / 2;
+
+				for (int y = reducedDrawStart; y < reducedDrawEnd; y += 2) { // Skip every other pixel
+					// Cast the texture coordinate to integer, and mask with (texHeight - 1) in case of overflow
+					texY = (int)texPos & (TEX_HEIGHT - 1);
+					texPos += step;
+					color = texture[texNum][TEX_WIDTH * texY + texX];
+					//make color darker for y-sides:
+					// R, G and B byte each divided through two with a "shift" and an "and"
+					if (side == 1)
+						color = ((color >> 1) & 0xFFEF);
+					// Update the buffer at position (x, y)
+					*(p + y) = color;
+					*(p + y + SCREEN_WIDTH) = color;
+				}
 			}
 		}
 		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
@@ -286,5 +328,4 @@ int main()
 			isButtonPressedB = false;
 		}
 	}
-
 }
