@@ -88,7 +88,6 @@ int main()
 	int mapX, mapY;
 	int stepX, stepY;
 	int hit, side;
-	// probably need to fix this
 	int w = SCREEN_HEIGHT;
 	int h = SCREEN_WIDTH;
 	int lineHeight;
@@ -101,10 +100,11 @@ int main()
     uBit.messageBus.listen(MICROBIT_ID_BUTTON_A, MICROBIT_BUTTON_EVT_CLICK, onButtonA);
     uBit.messageBus.listen(MICROBIT_ID_BUTTON_B, MICROBIT_BUTTON_EVT_CLICK, onButtonB);
 
-	std::vector<int16_t> texture[8];
-	for(int i = 0; i < 8; i++)
+	std::vector<int16_t> texture[9];
+	for(int i = 0; i < 9; i++)
 		texture[i].resize(TEX_WIDTH * TEX_HEIGHT);
 
+	// NOTE: color representation is R-B-G!!!
 	for (int x = 0; x < TEX_WIDTH; x++) {
 		for (int y = 0; y < TEX_HEIGHT; y++) {
 			int xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
@@ -119,6 +119,7 @@ int main()
 			texture[5][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)) << 11; // Red bricks
 			texture[6][TEX_WIDTH * y + x] = ycolor << 11; // Red gradient
 			texture[7][TEX_WIDTH * y + x] = 16 + 16*32 + 24*2048; // Flat grey texture
+			texture[8][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)); // Green bricks
 		}
 	}
 
@@ -126,7 +127,7 @@ int main()
 		startTime = system_timer_current_time(); // Time at start of the loop
 
 		// Floor casting
-		for (int y = SCREEN_HEIGHT / 2 + 1; y < SCREEN_HEIGHT; ++y) {
+		for (int y = h / 2 + 1; y < h; ++y) {
 			// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
 			float rayDirX0 = dirX - planeX;
 			float rayDirY0 = dirY - planeY;
@@ -134,10 +135,10 @@ int main()
 			float rayDirY1 = dirY + planeY;
 
 			// Current y position compared to the center of the screen (the horizon)
-			int p = y - SCREEN_HEIGHT / 2;
+			int p = y - h / 2;
 
 			// Vertical position of the camera.
-			float posZ = 0.5 * SCREEN_HEIGHT;
+			float posZ = 0.5 * h;
 
 			// Horizontal distance from the camera to the floor for the current row.
 			// 0.5 is the z position exactly in the middle between floor and ceiling.
@@ -145,14 +146,14 @@ int main()
 
 			// calculate the real world step vector we have to add for each x (parallel to camera plane)
 			// adding step by step avoids multiplications with a weight in the inner loop
-			float floorStepX = rowDistance * (rayDirX1 - rayDirX0) / SCREEN_WIDTH;
-			float floorStepY = rowDistance * (rayDirY1 - rayDirY0) / SCREEN_WIDTH;
+			float floorStepX = rowDistance * (rayDirX1 - rayDirX0) / w;
+			float floorStepY = rowDistance * (rayDirY1 - rayDirY0) / w;
 
 			// real world coordinates of the leftmost column. This will be updated as we step to the right.
 			float floorX = posX + rowDistance * rayDirX0;
 			float floorY = posY + rowDistance * rayDirY0;
 
-			for(int x = 0; x < SCREEN_WIDTH; ++x) {
+			for(int x = 0; x < w; ++x) {
 				// the cell coord is simply got from the integer parts of floorX and floorY
 				int cellX = (int)(floorX);
 				int cellY = (int)(floorY);
@@ -166,7 +167,7 @@ int main()
 
 				// choose texture and draw the pixel
 				int floorTexture = 0;
-				int ceilingTexture = 1;
+				int ceilingTexture = 8;
 				int16_t color;
 
 				// floor
@@ -178,7 +179,7 @@ int main()
 				//ceiling (symmetrical, at screenHeight - y - 1 instead of y)
 				color = texture[ceilingTexture][TEX_WIDTH * ty + tx];
 				color = (color >> 1) & 0x7BEF; // make a bit darker
-				p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + SCREEN_HEIGHT - y - 1);
+				p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + SCREEN_WIDTH - y - 1);
                 *p = color; // Update the buffer at position (x, y)
 			}
 		}
@@ -261,8 +262,6 @@ int main()
 			}
 		}
 		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
-		for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT * 2; i++)
-			img[i] = 0;
 		endTime = system_timer_current_time();
 		frameTime = (endTime - startTime) / 1000.0;
 
