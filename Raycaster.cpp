@@ -76,29 +76,28 @@ void verticalLine(ManagedBuffer buf, int x, int drawStart, int drawEnd, int colo
 }
 
 void texturedVerticalLine(ManagedBuffer buf, int x, int drawStart, int drawEnd,
-    int wallType, double wallX, double perpWallDist, int side, int lineHeight,
-    double rayDirX, double rayDirY, double posX, double posY)
+				int wallType, double wallX, double perpWallDist, int side, int lineHeight,
+				double rayDirX, double rayDirY, double posX, double posY)
 {
     uint16_t *p = (uint16_t *) &buf[0] + (x * SCREEN_WIDTH + drawStart);
 
     const int textureSize = 8;
 
     // Correct the wallX value to ensure it's within the range [0,1]
-    if (side == 1) {
-        wallX = posX + perpWallDist * rayDirX;
-    } else {
-        wallX = posY + perpWallDist * rayDirY;
-    }
+	wallX = (side == 1) ? posX + perpWallDist * rayDirX :
+			posY + perpWallDist * rayDirY;
     wallX -= floor(wallX); // Remove the integer part
 
     // Calculate the offset on the texture
     int texX = int(wallX * double(textureSize));
-    if (side == 0 && rayDirX > 0) texX = textureSize - texX - 1;
-    if (side == 1 && rayDirY < 0) texX = textureSize - texX - 1;
+    if ((side == 0 && rayDirX > 0) || (side == 1 && rayDirY < 0)) {
+        texX = textureSize - texX - 1;
+    }
 
+	// Textures are swimming here...
     for (int y = drawStart; y < drawEnd; y++) {
-        int d = (y - drawStart) * 256; // 256 is chosen to avoid floats
-        int texY = ((d * textureSize) / lineHeight) / 256;
+        int d = (y - drawStart) * 128;
+        int texY = ((d * textureSize) / lineHeight) / 128;
         texY %= textureSize; // Wrap around the texture
 
         int color;
@@ -212,22 +211,23 @@ int main()
 					hit = 1;
 			}
 
-			perpWallDist = (side == 0) ? (sideDistX - deltaX) :
-							(sideDistY - deltaY);
-			lineHeight = (int)(h / perpWallDist);
-
-			drawStart = -(lineHeight / 2) + (h / 2);
-			if (drawStart < 0) drawStart = 0;
-			drawEnd = (lineHeight / 2) + (h / 2);
-			if (drawEnd >= h) drawEnd = h - 1;
-
+			double wallHeightFactor = 1.0; // Default height factor
 			switch (worldMap[mapX][mapY]) {
 				case 1:  color = RED;     break;
-				case 2:  color = GREEN;	  break;
+				case 2:  color = GREEN;	  wallHeightFactor = 1.5; break;
 				case 3:  color = BLUE;	  break;
 				case 4:  color = WHITE;	  break;
 				default: color = YELLOW;  break;
 			}
+
+			perpWallDist = (side == 0) ? (sideDistX - deltaX) :
+							(sideDistY - deltaY);
+			lineHeight = (int)(h / perpWallDist * wallHeightFactor);
+			drawStart = -(lineHeight / 2) + (h / 2);
+			drawEnd = (lineHeight / 2) + (h / 2);
+			if (drawStart < 0) drawStart = 0;
+			if (drawEnd >= h) drawEnd = h - 1;
+
 			if (side == 1) {
 				int red = ((color & 0xF800) >> 1) | 0x0400;
 				int green = ((color & 0x07E0) >> 1) | 0x0040;
