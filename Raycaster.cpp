@@ -14,21 +14,12 @@ MicroBit uBit;
 
 #define MAP_WIDTH   	24
 #define MAP_HEIGHT  	24
-#define TEX_WIDTH		64
-#define TEX_HEIGHT		64
+#define TEX_WIDTH		16
+#define TEX_HEIGHT		16
 #define SCREEN_WIDTH    128
 #define SCREEN_HEIGHT   160
 
-#define RED     0xFC00
-#define GREEN   0x001F
-#define BLUE    0x03E0
-#define WHITE	0xFFFF
-#define YELLOW	0xFEE0
-#define BLACK 	0x0000
-
-#define MAX_VIEW_DISTANCE	5
-
-int worldMap[MAP_WIDTH][MAP_HEIGHT]=
+int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 {
 	{4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,7,7,7,7,7,7,7,7},
 	{4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0,0,0,7},
@@ -49,83 +40,23 @@ int worldMap[MAP_WIDTH][MAP_HEIGHT]=
 	{4,0,0,0,0,0,0,0,0,4,6,0,6,2,0,0,0,0,0,2,0,0,0,2},
 	{4,0,0,0,0,0,0,0,0,0,0,0,6,2,0,0,5,0,0,2,0,0,0,2},
 	{4,0,0,0,0,0,0,0,0,4,6,0,6,2,0,0,0,0,0,2,2,0,2,2},
-	{4,0,6,0,6,0,0,0,0,4,6,0,0,0,0,0,5,0,0,0,0,0,0,2},
-	{4,0,0,5,0,0,0,0,0,4,6,0,6,2,0,0,0,0,0,2,2,0,2,2},
-	{4,0,6,0,6,0,0,0,0,4,6,0,6,2,0,0,5,0,0,2,0,0,0,2},
-	{4,0,0,0,0,0,0,0,0,4,6,0,6,2,0,0,0,0,0,2,0,0,0,2},
+	{4,0,6,0,6,0,0,0,0,4,5,0,0,0,0,0,5,0,0,0,0,0,0,2},
+	{4,0,0,5,0,0,0,0,0,4,4,0,6,2,0,0,0,0,0,2,2,0,2,2},
+	{4,0,6,0,6,0,0,0,0,4,3,0,6,2,0,0,5,0,0,2,0,0,0,2},
+	{4,0,0,0,0,0,0,0,0,4,2,0,7,2,0,0,0,0,0,2,0,0,0,2},
 	{4,4,4,4,4,4,4,4,4,4,1,1,1,2,2,2,2,2,2,3,3,3,3,3}
 };
-
-uint32_t buffer[SCREEN_HEIGHT][SCREEN_WIDTH];
-
-void setColor(ManagedBuffer buf, uint16_t value, int offset)
-{
-    uint16_t *p = (uint16_t *) &buf[offset];
-
-	// draw up to specific point
-    while(p < (uint16_t *) &buf[buf.length()]) {
-        *p = value;
-        p++;
-    }
-}
-
-void verticalLine(ManagedBuffer buf, int x, int drawStart, int drawEnd, int color)
-{
-    uint16_t *p = (uint16_t *) &buf[0] + (x * SCREEN_WIDTH + drawStart);
-
-    while (drawStart <= drawEnd) {
-        *p = color;
-        p++;
-        drawStart++;
-    }
-}
-
-void texturedVerticalLine(ManagedBuffer buf, int x, int drawStart, int drawEnd,
-				int wallType, double wallX, double perpWallDist, int side, int lineHeight,
-				double rayDirX, double rayDirY, double posX, double posY)
-{
-    uint16_t *p = (uint16_t *) &buf[0] + (x * SCREEN_WIDTH + drawStart);
-
-    const int textureSize = 8;
-
-    // Correct the wallX value to ensure it's within the range [0,1]
-	wallX = (side == 1) ? posX + perpWallDist * rayDirX :
-			posY + perpWallDist * rayDirY;
-    wallX -= floor(wallX); // Remove the integer part
-
-    // Calculate the offset on the texture
-    int texX = int(wallX * double(textureSize));
-    if ((side == 0 && rayDirX > 0) || (side == 1 && rayDirY < 0)) {
-        texX = textureSize - texX - 1;
-    }
-
-	// Textures are swimming here...
-    for (int y = drawStart; y < drawEnd; y++) {
-        int d = (y - drawStart) * 128;
-        int texY = ((d * textureSize) / lineHeight) / 128;
-        texY %= textureSize; // Wrap around the texture
-
-        int color;
-        // Simple checkerboard pattern for texture
-        if ((texX % 2 == 0) ^ (texY % 2 == 0)) {
-            color = wallType;
-        } else {
-            color = BLACK;
-        }
-
-        *p = color;
-        p++;
-    }
-}
 
 bool isButtonPressedA = false;
 bool isButtonPressedB = false;
 
-void onButtonA(MicroBitEvent) {
+void onButtonA(MicroBitEvent)
+{
     isButtonPressedA = true;
 }
 
-void onButtonB(MicroBitEvent) {
+void onButtonB(MicroBitEvent)
+{
     isButtonPressedB = true;
 }
 
@@ -134,12 +65,12 @@ int main()
 	uBit.init();
 	uBit.sleep(500);
 
-	ManagedBuffer img(SCREEN_WIDTH * SCREEN_HEIGHT * 2);
+	ManagedBuffer img(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(int16_t));
     Adafruit_ST7735 *lcd = new Adafruit_ST7735(LCD_PIN_CS, LCD_PIN_DC, LCD_PIN_RST,
 							LCD_PIN_MOSI, LCD_PIN_MISO, LCD_PIN_SCLK);
     lcd->initR(INITR_GREENTAB);
 
-    double posX = 22, posY = 12;      // Initial starting positions
+    double posX = 22, posY = 11.5;      // Initial starting positions
     double dirX = -1, dirY = 0;    	  // Initial direction vector
     double planeX = 0, planeY = 0.66; // 2D Raycaster of camera plane
 
@@ -152,44 +83,106 @@ int main()
 	double moveSpeed, rotSpeed;
 	double perpWallDist;
 	double frameTime;
+	double wallX;
 
 	int mapX, mapY;
 	int stepX, stepY;
 	int hit, side;
+	// probably need to fix this
 	int w = SCREEN_HEIGHT;
 	int h = SCREEN_WIDTH;
 	int lineHeight;
 	int drawStart, drawEnd;
-	int color = 0;
+	int16_t color = 0;
+	int pitch;
+	int texNum;
 
     // Register the button A press event handler
     uBit.messageBus.listen(MICROBIT_ID_BUTTON_A, MICROBIT_BUTTON_EVT_CLICK, onButtonA);
     uBit.messageBus.listen(MICROBIT_ID_BUTTON_B, MICROBIT_BUTTON_EVT_CLICK, onButtonB);
 
-	std::vector<uint32_t> texture[8];
-	for(int x = 0; x < TEX_WIDTH; x++)
-		for(int y = 0; y < TEX_HEIGHT; y++) {
-			int xorcolor = (x * 256 / TEX_WIDTH) ^ (y * 256 / TEX_HEIGHT);
-			//int xcolor = x * 256 / texWidth;
-			int ycolor = y * 256 / TEX_HEIGHT;
-			int xycolor = y * 128 / TEX_HEIGHT + x * 128 / TEX_WIDTH;
-			texture[0][TEX_WIDTH * y + x] = 65536 * 254 * (x != y && x != TEX_WIDTH - y); //flat red texture with black cross
-			texture[1][TEX_WIDTH * y + x] = xycolor + 256 * xycolor + 65536 * xycolor; //sloped greyscale
-			texture[2][TEX_WIDTH * y + x] = 256 * xycolor + 65536 * xycolor; //sloped yellow gradient
-			texture[3][TEX_WIDTH * y + x] = xorcolor + 256 * xorcolor + 65536 * xorcolor; //xor greyscale
-			texture[4][TEX_WIDTH * y + x] = 256 * xorcolor; //xor green
-			texture[5][TEX_WIDTH * y + x] = 65536 * 192 * (x % 16 && y % 16); //red bricks
-			texture[6][TEX_WIDTH * y + x] = 65536 * ycolor; //red gradient
-			texture[7][TEX_WIDTH * y + x] = 128 + 256 * 128 + 65536 * 128; //flat grey texture
+	std::vector<int16_t> texture[8];
+	for(int i = 0; i < 8; i++)
+		texture[i].resize(TEX_WIDTH * TEX_HEIGHT);
+
+	for (int x = 0; x < TEX_WIDTH; x++) {
+		for (int y = 0; y < TEX_HEIGHT; y++) {
+			int xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
+			int ycolor = y - y * 32 / TEX_HEIGHT;
+			int xycolor = y * 16 / TEX_HEIGHT + x * 16 / TEX_WIDTH;
+
+			texture[0][TEX_WIDTH * y + x] = (31 * (x != y && x != TEX_WIDTH - y)) << 11; // Red with black cross
+			texture[1][TEX_WIDTH * y + x] = xycolor << 11 | xycolor << 6 | xycolor; // Sloped greyscale
+			texture[2][TEX_WIDTH * y + x] = xycolor << 11 | xycolor << 6; // Sloped yellow gradient
+			texture[3][TEX_WIDTH * y + x] = xorcolor << 11 | xorcolor << 6 | xorcolor; // XOR greyscale
+			texture[4][TEX_WIDTH * y + x] = xorcolor << 5; // XOR green
+			texture[5][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)) << 11; // Red bricks
+			texture[6][TEX_WIDTH * y + x] = ycolor << 11; // Red gradient
+			texture[7][TEX_WIDTH * y + x] = 16 + 16*32 + 24*2048; // Flat grey texture
 		}
+	}
 
 	while(1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
-        // Clear the screen at the start of each frame
-        for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT * 2; i += 2) {
-            img[i] = BLACK & 0xFF;
-            img[i + 1] = (BLACK >> 8) & 0xFF;
-        }
+
+		// Floor casting
+		for (int y = SCREEN_HEIGHT / 2 + 1; y < SCREEN_HEIGHT; ++y) {
+			// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
+			float rayDirX0 = dirX - planeX;
+			float rayDirY0 = dirY - planeY;
+			float rayDirX1 = dirX + planeX;
+			float rayDirY1 = dirY + planeY;
+
+			// Current y position compared to the center of the screen (the horizon)
+			int p = y - SCREEN_HEIGHT / 2;
+
+			// Vertical position of the camera.
+			float posZ = 0.5 * SCREEN_HEIGHT;
+
+			// Horizontal distance from the camera to the floor for the current row.
+			// 0.5 is the z position exactly in the middle between floor and ceiling.
+			float rowDistance = posZ / p;
+
+			// calculate the real world step vector we have to add for each x (parallel to camera plane)
+			// adding step by step avoids multiplications with a weight in the inner loop
+			float floorStepX = rowDistance * (rayDirX1 - rayDirX0) / SCREEN_WIDTH;
+			float floorStepY = rowDistance * (rayDirY1 - rayDirY0) / SCREEN_WIDTH;
+
+			// real world coordinates of the leftmost column. This will be updated as we step to the right.
+			float floorX = posX + rowDistance * rayDirX0;
+			float floorY = posY + rowDistance * rayDirY0;
+
+			for(int x = 0; x < SCREEN_WIDTH; ++x) {
+				// the cell coord is simply got from the integer parts of floorX and floorY
+				int cellX = (int)(floorX);
+				int cellY = (int)(floorY);
+
+				// get the texture coordinate from the fractional part
+				int tx = (int)(TEX_WIDTH * (floorX - cellX)) & (TEX_WIDTH - 1);
+				int ty = (int)(TEX_HEIGHT * (floorY - cellY)) & (TEX_HEIGHT - 1);
+
+				floorX += floorStepX;
+				floorY += floorStepY;
+
+				// choose texture and draw the pixel
+				int floorTexture = 0;
+				int ceilingTexture = 1;
+				int16_t color;
+
+				// floor
+				color = texture[floorTexture][TEX_WIDTH * ty + tx];
+				color = (color >> 1) & 0x7BEF; // make a bit darker
+				uint16_t *p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + y);
+                *p = color; // Update the buffer at position (x, y)
+
+				//ceiling (symmetrical, at screenHeight - y - 1 instead of y)
+				color = texture[ceilingTexture][TEX_WIDTH * ty + tx];
+				color = (color >> 1) & 0x7BEF; // make a bit darker
+				p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + SCREEN_HEIGHT - y - 1);
+                *p = color; // Update the buffer at position (x, y)
+			}
+		}
+		// Wall casting
 		for (int x = 0; x < w; x++) {
 			cameraX = (2 * x) / (double)w - 1;
 			rayDirX = dirX + (planeX * cameraX);
@@ -233,58 +226,48 @@ int main()
 					hit = 1;
 			}
 
-			double wallHeightFactor = 1.0; // Default height factor
-			switch (worldMap[mapX][mapY]) {
-				case 1:  color = RED;     break;
-				case 2:  color = GREEN;	  wallHeightFactor = 1.5; break;
-				case 3:  color = BLUE;	  break;
-				case 4:  color = WHITE;	  break;
-				default: color = YELLOW;  break;
-			}
-
 			perpWallDist = (side == 0) ? (sideDistX - deltaX) :
 							(sideDistY - deltaY);
-			lineHeight = (int)(h / perpWallDist * wallHeightFactor);
-			drawStart = -(lineHeight / 2) + (h / 2);
-			drawEnd = (lineHeight / 2) + (h / 2);
+			lineHeight = (int)(h / perpWallDist);
+
+			pitch = 0;
+			drawStart = -(lineHeight / 2) + (h / 2) + pitch;
+			drawEnd = (lineHeight / 2) + (h / 2) + pitch;
 			if (drawStart < 0) drawStart = 0;
 			if (drawEnd >= h) drawEnd = h - 1;
 
-			if (side == 1) {
-				int red = ((color & 0xF800) >> 1) | 0x0400;
-				int green = ((color & 0x07E0) >> 1) | 0x0040;
-				int blue = ((color & 0x001F) >> 1) | 0x0001;
+			texNum = worldMap[mapX][mapY] - 1;
 
-				color = (red & 0xF800) | (green & 0x07E0) | (blue & 0x001F);
+			wallX = (side == 0) ? posY + perpWallDist * rayDirY :
+			 		posX + perpWallDist * rayDirX;
+			wallX -= floor(wallX); // Remove the integer part
+
+			int texX = int(wallX * double(TEX_WIDTH));
+			if(side == 0 && rayDirX > 0) texX = TEX_WIDTH - texX - 1;
+			if(side == 1 && rayDirY < 0) texX = TEX_WIDTH - texX - 1;
+			double step = 1.0 * TEX_HEIGHT / lineHeight;
+			double texPos = (drawStart - pitch - h / 2 + lineHeight / 2) * step;
+
+			for (int y = drawStart; y < drawEnd; y++) {
+				// Cast the texture coordinate to integer, and mask with (texHeight - 1) in case of overflow
+				int texY = (int)texPos & (TEX_HEIGHT - 1);
+				texPos += step;
+				color = texture[texNum][TEX_WIDTH * texY + texX];
+				//make color darker for y-sides: R, G and B byte each divided through two with a "shift" and an "and"
+				// if (side == 1)
+				// 	color = ((color >> 1) & 0xFFEF);
+                uint16_t *p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + y);
+                *p = color; // Update the buffer at position (x, y)
 			}
-			// Apply distance shading (this is cooked)
-			// float shade = 1.0 - (perpWallDist / MAX_VIEW_DISTANCE);
-			// shade = (shade < 0.3) ? 0.3 : shade; // Clamp minimum shade
-
-			// int red = (int)((((color & 0xF800) >> 11) * shade)) << 11;
-			// int green = (int)((((color & 0x07E0) >> 5) * shade)) << 5;
-			// int blue = (color & 0x001F) * shade;
-
-			// color = red | green | blue;
-
-			if (worldMap[mapX][mapY] == 3) { // For textured walls
-				double wallX; // X coordinate on the texture
-				if (side == 0) wallX = posY + perpWallDist * rayDirY;
-				else           wallX = posX + perpWallDist * rayDirX;
-				wallX -= floor((wallX)); // Remove the integer part to get the fractional part
-
-				texturedVerticalLine(img, x, drawStart, drawEnd, BLUE, wallX,
-					perpWallDist, side, lineHeight, rayDirX, rayDirY, posX, posY);
-			} else
-			verticalLine(img, x, drawStart, drawEnd, color);
 		}
+		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
+		for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT * 2; i++)
+			img[i] = 0;
 		endTime = system_timer_current_time();
 		frameTime = (endTime - startTime) / 1000.0;
 
 		moveSpeed = frameTime * 5.0; //the constant value is in squares/second
     	rotSpeed = frameTime * 3.0; //the constant value is in radians/second
-
-		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
 
         if (uBit.buttonA.isPressed()) {
 			if(worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false)
