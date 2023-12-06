@@ -75,6 +75,45 @@ void verticalLine(ManagedBuffer buf, int x, int drawStart, int drawEnd, int colo
     }
 }
 
+void texturedVerticalLine(ManagedBuffer buf, int x, int drawStart, int drawEnd,
+    int wallType, double wallX, double perpWallDist, int side, int lineHeight,
+    double rayDirX, double rayDirY, double posX, double posY)
+{
+    uint16_t *p = (uint16_t *) &buf[0] + (x * SCREEN_WIDTH + drawStart);
+
+    const int textureSize = 8;
+
+    // Correct the wallX value to ensure it's within the range [0,1]
+    if (side == 1) {
+        wallX = posX + perpWallDist * rayDirX;
+    } else {
+        wallX = posY + perpWallDist * rayDirY;
+    }
+    wallX -= floor(wallX); // Remove the integer part
+
+    // Calculate the offset on the texture
+    int texX = int(wallX * double(textureSize));
+    if (side == 0 && rayDirX > 0) texX = textureSize - texX - 1;
+    if (side == 1 && rayDirY < 0) texX = textureSize - texX - 1;
+
+    for (int y = drawStart; y < drawEnd; y++) {
+        int d = (y - drawStart) * 256; // 256 is chosen to avoid floats
+        int texY = ((d * textureSize) / lineHeight) / 256;
+        texY %= textureSize; // Wrap around the texture
+
+        int color;
+        // Simple checkerboard pattern for texture
+        if ((texX % 2 == 0) ^ (texY % 2 == 0)) {
+            color = wallType;
+        } else {
+            color = BLACK;
+        }
+
+        *p = color;
+        p++;
+    }
+}
+
 bool isButtonPressedA = false;
 bool isButtonPressedB = false;
 
@@ -205,6 +244,16 @@ int main()
 			// int blue = (color & 0x001F) * shade;
 
 			// color = red | green | blue;
+
+			if (worldMap[mapX][mapY] == 3) { // For textured walls
+				double wallX; // X coordinate on the texture
+				if (side == 0) wallX = posY + perpWallDist * rayDirY;
+				else           wallX = posX + perpWallDist * rayDirX;
+				wallX -= floor((wallX)); // Remove the integer part to get the fractional part
+
+				texturedVerticalLine(img, x, drawStart, drawEnd, BLUE, wallX,
+					perpWallDist, side, lineHeight, rayDirX, rayDirY, posX, posY);
+			} else
 			verticalLine(img, x, drawStart, drawEnd, color);
 		}
 		endTime = system_timer_current_time();
