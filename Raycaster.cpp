@@ -20,9 +20,9 @@ MicroBit uBit;
 #define SCREEN_HEIGHT   160
 #define TEX_MASK		((TEX_HEIGHT) - 1)
 
-#define FLOOR_TEXTURE	8
-#define CEILING_TEXTURE	9
-#define DISTANCE_THRESHOLD 8
+#define FLOOR_TEXTURE		8
+#define CEILING_TEXTURE		9
+#define DISTANCE_THRESHOLD 	10
 
 #define NUM_TEXTURES	11
 
@@ -122,7 +122,7 @@ int main()
 		}
 	}
 
-	uBit.sleep(100);
+	uBit.sleep(200);
 
 	while(1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
@@ -251,7 +251,7 @@ int main()
 					// Cast the texture coordinate to integer, and mask in case of overflow
 					texY = (int)texPos & TEX_MASK;
 					color = texture[texNum][TEX_WIDTH * texY + texX];
-					// color = (side == 1) ? ((color >> 1) & 0x7BEF) : color; // Make color darker for y-sides
+					color = (side == 1) ? (color & 0xEF9E) : color; // Make color darker for y-sides
 					p[y] = color; // Update the buffer at position (x, y)
 				}
 			} else { // Render wall with less detail for distant walls
@@ -263,7 +263,6 @@ int main()
 					// Cast the texture coordinate to integer, and mask in case of overflow
 					texY = (int)texPos & TEX_MASK;
 					color = texture[texNum][TEX_WIDTH * texY + texX];
-					// color = (side == 1) ? ((color >> 1) & 0x7BEF) : color; // Make color darker for y-sides
 					p[y] = color; // Update the buffer at position (x, y)
 				}
 			}
