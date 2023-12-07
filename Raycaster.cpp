@@ -99,9 +99,6 @@ int main()
 
 	float rayDirX0, rayDirY0, rayDirX1, rayDirY1;
 
-	int texY_arr[2];
-	int16_t color_arr[2];
-
 	std::vector<int16_t> texture[NUM_TEXTURES];
 	for(int i = 0; i < NUM_TEXTURES; i++)
 		texture[i].resize(TEX_WIDTH * TEX_HEIGHT);
@@ -253,40 +250,18 @@ int main()
 			if (perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
 				// Loop unrolling (I'm really desperate)
 				if (side == 1) {
-					for (auto y = drawStart; y < drawEnd; y += 4, texPos += 4 * step) {
+					for (auto y = drawStart; y < drawEnd; y++, texPos += step) {
 						// Cast the texture coordinate to integer, and mask in case of overflow
-						texY_arr[0] = (int)texPos & TEX_MASK;
-						texY_arr[1] = (int)(texPos + step) & TEX_MASK;
-						texY_arr[2] = (int)(texPos + step * 2) & TEX_MASK;
-						texY_arr[3] = (int)(texPos + step * 3) & TEX_MASK;
-
-						color_arr[0] = (texture[texNum][TEX_WIDTH * texY_arr[0] + texX]) & COLOR_MASK;
-						color_arr[1] = (texture[texNum][TEX_WIDTH * texY_arr[1] + texX]) & COLOR_MASK;
-						color_arr[2] = (texture[texNum][TEX_WIDTH * texY_arr[2] + texX]) & COLOR_MASK;
-						color_arr[3] = (texture[texNum][TEX_WIDTH * texY_arr[3] + texX]) & COLOR_MASK;
-
-						p[y] 	 = color_arr[0];
-						p[y + 1] = color_arr[1];
-						p[y + 2] = color_arr[2];
-						p[y + 3] = color_arr[3];
+						texY = (int)texPos & TEX_MASK;
+						color = (texture[texNum][TEX_WIDTH * texY + texX] & COLOR_MASK);
+						p[y] = color;
 					}
 				} else {
-					for (auto y = drawStart; y < drawEnd; y += 4, texPos += 4 * step) {
+					for (auto y = drawStart; y < drawEnd; y++, texPos += step) {
 						// Cast the texture coordinate to integer, and mask in case of overflow
-						texY_arr[0] = (int)texPos & TEX_MASK;
-						texY_arr[1] = (int)(texPos + step) & TEX_MASK;
-						texY_arr[2] = (int)(texPos + step * 2) & TEX_MASK;
-						texY_arr[3] = (int)(texPos + step * 3) & TEX_MASK;
-
-						color_arr[0] = texture[texNum][TEX_WIDTH * texY_arr[0] + texX];
-						color_arr[1] = texture[texNum][TEX_WIDTH * texY_arr[1] + texX];
-						color_arr[2] = texture[texNum][TEX_WIDTH * texY_arr[2] + texX];
-						color_arr[3] = texture[texNum][TEX_WIDTH * texY_arr[3] + texX];
-
-						p[y] 	 = color_arr[0];
-						p[y + 1] = color_arr[1];
-						p[y + 2] = color_arr[2];
-						p[y + 3] = color_arr[3];
+						texY = (int)texPos & TEX_MASK;
+						color = texture[texNum][TEX_WIDTH * texY + texX];
+						p[y] = color;
 					}
 				}
 			} else { // Render wall with less detail for distant walls
@@ -310,9 +285,9 @@ int main()
 		if (perpWallDist < 1.5)
 			rotSpeed = frameTime * 4.0;
 		else if (perpWallDist < 1.0)
-			rotSpeed = frameTime * 5.0;
+			rotSpeed = frameTime * 7.0;
 		else if (perpWallDist < 0.5)
-			rotSpeed = frameTime * 6.0;
+			rotSpeed = frameTime * 10.0;
     	else
 			rotSpeed = frameTime * 3.0; //the constant value is in radians/second
 
