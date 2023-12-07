@@ -1,6 +1,5 @@
 #include "MicroBit.h"
 #include "Adafruit_ST7735.h"
-#include <vector>
 
 MicroBit uBit;
 
@@ -77,31 +76,39 @@ struct Sprite {
 
 Sprite sprite[NUM_SPRITES] =
 {
-  {20.5, 11.5, 10}, //green light in front of playerstart
-  //green lights in every room
-  {18.5,4.5, 10},
-  {10.0,4.5, 10},
-  {10.0,12.5,10},
-  {3.5, 6.5, 10},
-  {3.5, 20.5,10},
-  {3.5, 14.5,10},
-  {14.5,20.5,10},
+	{20.5, 11.5, 10}, //green light in front of playerstart
+	//green lights in every room
+	{18.5,4.5, 10},
+	{10.0,4.5, 10},
+	{10.0,12.5,10},
+	{3.5, 6.5, 10},
+	{3.5, 20.5,10},
+	{3.5, 14.5,10},
+	{14.5,20.5,10},
 
-  // Row of pillars in front of wall
-  {18.5, 10.5, 9},
-  {18.5, 11.5, 9},
-  {18.5, 12.5, 9},
+	// Row of pillars in front of wall
+	{18.5, 10.5, 9},
+	{18.5, 11.5, 9},
+	{18.5, 12.5, 9},
 
-  // Barrels around the map
-  {21.5, 1.5, 8},
-  {15.5, 1.5, 8},
-  {16.0, 1.8, 8},
-  {16.2, 1.2, 8},
-  {3.5,  2.5, 8},
-  {9.5, 15.5, 8},
-  {10.0, 15.1,8},
-  {10.5, 15.8,8},
+	// Barrels around the map
+	{21.5, 1.5, 8},
+	{15.5, 1.5, 8},
+	{16.0, 1.8, 8},
+	{16.2, 1.2, 8},
+	{3.5,  2.5, 8},
+	{9.5, 15.5, 8},
+	{10.0, 15.1,8},
+	{10.5, 15.8,8},
 };
+
+template <typename T>
+void swap(T& a, T& b)
+{
+    T temp = a;
+    a = b;
+    b = temp;
+}
 
 void bubbleSortSprites(int* order, float* dist, int amount)
 {
@@ -111,32 +118,37 @@ void bubbleSortSprites(int* order, float* dist, int amount)
         for (int j = 0; j < amount - i - 1; j++) {
             if (dist[j] < dist[j + 1]) {
                 // Swap the distances and the order
-                std::swap(dist[j], dist[j + 1]);
-                std::swap(order[j], order[j + 1]);
+                swap(dist[j], dist[j + 1]);
+                swap(order[j], order[j + 1]);
                 swapped = true;
             }
         }
-        // If no two elements were swapped by inner loop, then break
-        if (!swapped) {
+        if (!swapped) // Break if no two elements swapped by inner loop
             break;
-        }
     }
 }
 
 //sort the sprites based on distance
 void sortSprites(int* order, float* dist, int amount)
 {
-	std::vector<std::pair<float, int>> sprites(amount);
-	for (int i = 0; i < amount; i++) {
-		sprites[i].first = dist[i];
-		sprites[i].second = order[i];
-	}
-	bubbleSortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
-	// restore in reverse order to go from farthest to nearest
-	for (int i = 0; i < amount; i++) {
-		dist[i] = sprites[amount - i - 1].first;
-		order[i] = sprites[amount - i - 1].second;
-	}
+    // Allocate memory for dynamic arrays for sorted value's arrays
+    float* sortedDist = new float[amount];
+    int* sortedOrder = new int[amount];
+
+    for (int i = 0; i < amount; i++) {
+        sortedDist[i] = dist[i];
+        sortedOrder[i] = order[i];
+    }
+    bubbleSortSprites(sortedOrder, sortedDist, amount);
+
+    // Restore in reverse order to go from farthest to nearest
+    for (int i = 0; i < amount; i++) {
+        dist[i] = sortedDist[amount - i - 1];
+        order[i] = sortedOrder[amount - i - 1];
+    }
+    // Free the allocated memory
+    delete[] sortedDist;
+    delete[] sortedOrder;
 }
 
 int main()
@@ -433,8 +445,8 @@ int main()
 		endTime = system_timer_current_time();
 		frameTime = (endTime - startTime) / 1000.0;
 
-		moveSpeed = frameTime * 3.0; //the constant value is in squares/second
-		rotSpeed = frameTime * 1.5; //the constant value is in radians/second
+		moveSpeed = frameTime * 4.0; // Constant value is in squares/second
+		rotSpeed = frameTime * 2.0;  // Constant value is in radians/second
 
 		if (uBit.buttonAB.isPressed()) {
 			if(worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false)
