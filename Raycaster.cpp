@@ -19,9 +19,11 @@ MicroBit uBit;
 #define SCREEN_WIDTH    128
 #define SCREEN_HEIGHT   160
 
-#define FLOOR_TEXTURE	0
-#define CEILING_TEXTURE	8
+#define FLOOR_TEXTURE	8
+#define CEILING_TEXTURE	9
 #define DISTANCE_THRESHOLD 8
+
+#define NUM_TEXTURES	11
 
 int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 {
@@ -86,7 +88,6 @@ int main()
 	int lineHeight;
 	int drawStart, drawEnd;
 	int16_t color = 0;
-	int pitch;
 	int texNum;
 	uint16_t *p;
 	int reducedLineHeight;
@@ -94,8 +95,8 @@ int main()
 
 	float rayDirX0, rayDirY0, rayDirX1, rayDirY1;
 
-	std::vector<int16_t> texture[9];
-	for(int i = 0; i < 9; i++)
+	std::vector<int16_t> texture[NUM_TEXTURES];
+	for(int i = 0; i < NUM_TEXTURES; i++)
 		texture[i].resize(TEX_WIDTH * TEX_HEIGHT);
 
 	// NOTE: color representation is R-B-G!!!
@@ -115,6 +116,7 @@ int main()
 			texture[6][TEX_WIDTH * y + x] = ycolor << 11; // Red gradient
 			texture[7][TEX_WIDTH * y + x] = 16 + 16*32 + 16*2048; // Flat grey texture
 			texture[8][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)); // Green bricks
+			texture[9][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)) << 5; // Blue bricks
 		}
 	}
 
@@ -146,12 +148,12 @@ int main()
 			rayDirX1 = dirX + planeX;
 			rayDirY1 = dirY + planeY;
 
-			int p = y - SCREEN_WIDTH / 2; 	 // Current y-coord compared to horizon
+			int p_y = y - SCREEN_WIDTH / 2;  // Current y-coord compared to horizon
 			float posZ = 0.5 * SCREEN_WIDTH; // Vertical position of the camera.
 
 			// Horizontal distance from the camera to the floor for the current row.
 			// 0.5 is the z position exactly in the middle between floor and ceiling.
-			float rowDistance = posZ / p;
+			float rowDistance = posZ / p_y;
 
 			// calculate the real world step vector we have to add for each x (parallel to camera plane)
 			// adding step by step avoids multiplications with a weight in the inner loop
@@ -175,13 +177,14 @@ int main()
 				floorX += floorStepX;
 				floorY += floorStepY;
 
-				color = texture[FLOOR_TEXTURE][TEX_WIDTH * ty + tx];
+				// Careful...we've inversed ceiling and floor!!!
+				color = texture[CEILING_TEXTURE][TEX_WIDTH * ty + tx];
 				color = (color >> 1) & 0x7BEF; // make a bit darker
 				uint16_t *p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + y);
                 *p = color; // Update the buffer at position (x, y)
 
 				//ceiling (symmetrical, at screenHeight - y - 1 instead of y)
-				color = texture[CEILING_TEXTURE][TEX_WIDTH * ty + tx];
+				color = texture[FLOOR_TEXTURE][TEX_WIDTH * ty + tx];
 				color = (color >> 1) & 0x7BEF; // make a bit darker
 				p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + SCREEN_WIDTH - y - 1);
                 *p = color; // Update the buffer at position (x, y)
@@ -201,8 +204,6 @@ int main()
 			deltaX = (rayDirX == 0) ? 1e30 : abs(1 / rayDirX);
 			deltaY = (rayDirY == 0) ? 1e30 : abs(1 / rayDirY);
 
-			hit = 0;
-
 			if (rayDirX < 0) {
 				stepX = -1;
 				sideDistX = (posX - mapX) * deltaX;
@@ -219,6 +220,7 @@ int main()
 			}
 
 			// Digital differential analyzer (DDA) algorithm
+			hit = 0;
 			while (hit == 0) {
 				// Jump to next map square in either x or y direction
 				if (sideDistX < sideDistY) {
@@ -239,9 +241,8 @@ int main()
 			lineHeight = (int)(SCREEN_WIDTH / perpWallDist);	// Calculate height of line to draw on screen
 
 			// Calculate lowest and highest pixel to fill in current stripe
-			pitch = 5;
-			drawStart = -(lineHeight / 2) + (SCREEN_WIDTH / 2) + pitch;
-			drawEnd = (lineHeight / 2) + (SCREEN_WIDTH / 2) + pitch;
+			drawStart = -(lineHeight / 2) + (SCREEN_WIDTH / 2);
+			drawEnd = (lineHeight / 2) + (SCREEN_WIDTH / 2);
 			if (drawStart < 0) drawStart = 0;
 			if (drawEnd >= SCREEN_WIDTH) drawEnd = SCREEN_WIDTH - 1;
 
@@ -252,10 +253,10 @@ int main()
 			wallX -= floor(wallX); // Where is the wall hit
 
 			texX = int(wallX * double(TEX_WIDTH));	// X-coordinate of texture
-			if(side == 0 && rayDirX > 0) texX = TEX_WIDTH - texX - 1;
-			if(side == 1 && rayDirY < 0) texX = TEX_WIDTH - texX - 1;
+			if (side == 0 && rayDirX > 0) texX = TEX_WIDTH - texX - 1;
+			if (side == 1 && rayDirY < 0) texX = TEX_WIDTH - texX - 1;
 			double step = 1.0 * TEX_HEIGHT / lineHeight;
-			double texPos = (drawStart - pitch - SCREEN_WIDTH / 2 + lineHeight / 2) * step;
+			double texPos = (drawStart - SCREEN_WIDTH / 2 + lineHeight / 2) * step;
 
 			p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH);
 			if (perpWallDist < DISTANCE_THRESHOLD) {
@@ -269,7 +270,7 @@ int main()
 					// R, G and B byte each divided through two with a "shift" and an "and"
 					if (side == 1)
 						color = ((color >> 1) & 0xFFEF);
-					*(p + y) = color; // Update the buffer at position (x, y)
+					p[y] = color; // Update the buffer at position (x, y)
 				}
 			} else {
 				// Render the wall with less detail for distant walls
@@ -287,8 +288,8 @@ int main()
 					if (side == 1)
 						color = ((color >> 1) & 0xFFEF);
 					// Update the buffer at position (x, y)
-					*(p + y) = color;
-					*(p + y + SCREEN_WIDTH) = color;
+					p[y] = color;
+					p[y + SCREEN_WIDTH] = color;
 				}
 			}
 		}
