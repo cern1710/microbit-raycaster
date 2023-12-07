@@ -129,7 +129,7 @@ int main()
 		startTime = system_timer_current_time(); // Time at start of the loop
 
 		// Floor casting (horizontal scanline)
-		for (auto y = SCREEN_HALF + 1; y < SCREEN_WIDTH; ++y) {
+		for (int y = SCREEN_HALF + 1; y < SCREEN_WIDTH; ++y) {
 			// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
 			rayDirX0 = dirX - planeX;
 			rayDirY0 = dirY - planeY;
@@ -153,7 +153,7 @@ int main()
 			float floorY = posY + rowDistance * rayDirY0;
 
 			// Linear interpolation for texture mapping
-			for (auto x = 0; x < SCREEN_HEIGHT; ++x) {
+			for (int x = 0; x < SCREEN_HEIGHT; ++x) {
 				// the cell coord is simply got from the integer parts of floorX and floorY
 				int cellX = (int)(floorX);
 				int cellY = (int)(floorY);
@@ -180,7 +180,7 @@ int main()
 		}
 
 		// Wall casting
-		for (auto x = 0; x < SCREEN_HEIGHT; ++x) {
+		for (int x = 0; x < SCREEN_HEIGHT; x++) {
 			cameraX = (2 * x) / (double)SCREEN_HEIGHT - 1;
 			rayDirX = dirX + (planeX * cameraX);
 			rayDirY = dirY + (planeY * cameraX);
@@ -227,8 +227,8 @@ int main()
 			lineHeight = (int)(SCREEN_WIDTH / perpWallDist);	// Calculate height of line to draw on screen
 
 			// Calculate lowest and highest pixel to fill in current stripe
-			drawStart = -(lineHeight / 2) + (SCREEN_HALF);
-			drawEnd = (lineHeight / 2) + (SCREEN_HALF);
+			drawStart = SCREEN_HALF - (lineHeight / 2);
+			drawEnd   = SCREEN_HALF + (lineHeight / 2);
 			if (drawStart < 0) drawStart = 0;
 			if (drawEnd >= SCREEN_WIDTH) drawEnd = SCREEN_WIDTH - 1;
 
@@ -247,7 +247,18 @@ int main()
 			p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH);
 			tex_ptr = (uint16_t *) &texture[texNum][texX];
 
-			if (perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
+
+			if (perpWallDist < 0.5) { // Render wall normally for closer walls
+				if (side == 1) {
+					// Cast the texture coordinate to integer, and mask in case of overflow
+					for (int y = drawStart; y < drawEnd; y += 4, texPos += 4 * step)
+						p[y] = (tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)] & COLOR_MASK);
+				} else {
+					for (int y = drawStart; y < drawEnd; y += 4, texPos += 4 * step)
+						p[y] = tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)];
+				}
+			}
+			else if (perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
 				if (side == 1) {
 					// Cast the texture coordinate to integer, and mask in case of overflow
 					for (int y = drawStart; y < drawEnd; y++, texPos += step)
