@@ -14,16 +14,15 @@ MicroBit uBit;
 
 #define TEX_WIDTH		16
 #define TEX_HEIGHT		16
-#define TEX_MASK		((TEX_HEIGHT) - 1)
-
 #define MAP_WIDTH   	24
 #define MAP_HEIGHT  	24
 #define SCREEN_WIDTH    128
 #define SCREEN_HEIGHT   160
+#define TEX_MASK		((TEX_HEIGHT) - 1)
 
 #define FLOOR_TEXTURE	8
 #define CEILING_TEXTURE	9
-#define DIST_THRESHOLD 	10
+#define DISTANCE_THRESHOLD 8
 
 #define NUM_TEXTURES	11
 
@@ -61,7 +60,6 @@ int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 int main()
 {
 	uBit.init();
-	uBit.sleep(500);
 
 	ManagedBuffer img(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(int16_t));
     Adafruit_ST7735 *lcd = new Adafruit_ST7735(LCD_PIN_CS, LCD_PIN_DC, LCD_PIN_RST,
@@ -84,7 +82,6 @@ int main()
 	double wallX;
 	double step;
 	double texPos;
-	double oldDirX, oldPlaneX;
 
 	int mapX, mapY;
 	int stepX, stepY;
@@ -99,9 +96,6 @@ int main()
 	int reducedDrawStart, reducedDrawEnd;
 
 	float rayDirX0, rayDirY0, rayDirX1, rayDirY1;
-
-	int texY_arr[2];
-	int16_t color_arr[2];
 
 	std::vector<int16_t> texture[NUM_TEXTURES];
 	for(int i = 0; i < NUM_TEXTURES; i++)
@@ -128,28 +122,13 @@ int main()
 		}
 	}
 
-	// Create mipmaps for each texture
-	// std::vector<int16_t> textureMipmaps[9];
-	// int MIPMAP_LEVELS = 3; // Number of mip levels
-	// for (int t = 0; t < 9; ++t) {
-	// 	for (int mip = 0; mip < MIPMAP_LEVELS; ++mip) {
-	// 		int mipWidth = TEX_WIDTH >> mip;
-	// 		int mipHeight = TEX_HEIGHT >> mip;
-	// 		textureMipmaps[t].resize(mipWidth * mipHeight);
-	// 		// Create mipmaps (simplified example, consider averaging neighboring pixels)
-	// 		for (int y = 0; y < mipHeight; ++y) {
-	// 			for (int x = 0; x < mipWidth; ++x) {
-	// 				textureMipmaps[t][mipWidth * y + x] = texture[t][TEX_WIDTH * (y << mip) + (x << mip)];
-	// 			}
-	// 		}
-	// 	}
-	// }
+	uBit.sleep(100);
 
 	while(1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
 
 		// Floor casting (horizontal scanline)
-		for (auto y = SCREEN_WIDTH / 2 + 1; y < SCREEN_WIDTH; ++y) {
+		for (int y = SCREEN_WIDTH / 2 + 1; y < SCREEN_WIDTH; y++) {
 			// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
 			rayDirX0 = dirX - planeX;
 			rayDirY0 = dirY - planeY;
@@ -173,7 +152,7 @@ int main()
 			float floorY = posY + rowDistance * rayDirY0;
 
 			// Linear interpolation for texture mapping
-			for (auto x = 0; x < SCREEN_HEIGHT; ++x) {
+			for(int x = 0; x < SCREEN_HEIGHT; ++x) {
 				// the cell coord is simply got from the integer parts of floorX and floorY
 				int cellX = (int)(floorX);
 				int cellY = (int)(floorY);
@@ -185,7 +164,7 @@ int main()
 				floorX += floorStepX;
 				floorY += floorStepY;
 
-				// Careful...we've inversed ceiling and floor!!!
+				// We've inversed ceiling and floor!!!
 				color = texture[CEILING_TEXTURE][TEX_WIDTH * ty + tx];
 				color = (color >> 1) & 0x7BEF; // make a bit darker
 				p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + y);
@@ -200,7 +179,7 @@ int main()
 		}
 
 		// Wall casting
-		for (auto x = 0; x < SCREEN_HEIGHT; ++x) {
+		for (int x = 0; x < SCREEN_HEIGHT; x++) {
 			cameraX = (2 * x) / (double)SCREEN_HEIGHT - 1;
 			rayDirX = dirX + (planeX * cameraX);
 			rayDirY = dirY + (planeY * cameraX);
@@ -261,44 +240,30 @@ int main()
 
 			texX = int(wallX * double(TEX_WIDTH));	// X-coordinate of texture
 			if ((side == 0 && rayDirX > 0) || (side == 1 && rayDirY < 0))
-			 	texX = TEX_WIDTH - texX - 1;
+				texX = TEX_WIDTH - texX - 1;
+
 			step = 1.0 * TEX_HEIGHT / lineHeight;
 			texPos = (drawStart - SCREEN_WIDTH / 2 + lineHeight / 2) * step;
 
 			p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH);
-			if (perpWallDist < DIST_THRESHOLD) { // Render wall normally for closer walls
-				if (side == 1) {
-					for (auto y = drawStart; y < drawEnd; y += 2, texPos += step * 2) { // Loop unrolling
-						// Cast the texture coordinate to integer, and mask in case of overflow
-						texY_arr[0] = (int)(texPos) & TEX_MASK;
-						texY_arr[1] = (int)(texPos + step) & TEX_MASK;
-						color_arr[0] = texture[texNum][TEX_WIDTH * texY_arr[0] + texX];
-						color_arr[1] = texture[texNum][TEX_WIDTH * texY_arr[1] + texX];
-						p[y] 	 = (color_arr[0] >> 1) & 0x7BEF;
-						p[y + 1] = (color_arr[1] >> 1) & 0x7BEF;
-					}
-				} else {
-					for (auto y = drawStart; y < drawEnd; y += 2, texPos += step * 2) { // Loop unrolling
-						// Cast the texture coordinate to integer, and mask in case of overflow
-						texY_arr[0] = (int)(texPos) & TEX_MASK;
-						texY_arr[1] = (int)(texPos + step) & TEX_MASK;
-						color_arr[0] = texture[texNum][TEX_WIDTH * texY_arr[0] + texX];
-						color_arr[1] = texture[texNum][TEX_WIDTH * texY_arr[1] + texX];
-						p[y] 	 = color_arr[0];
-						p[y + 1] = color_arr[1];
-					}
+			if (perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
+				for (int y = drawStart; y < drawEnd; y++, texPos += step) {
+					// Cast the texture coordinate to integer, and mask in case of overflow
+					texY = (int)texPos & TEX_MASK;
+					color = texture[texNum][TEX_WIDTH * texY + texX];
+					// color = (side == 1) ? ((color >> 1) & 0x7BEF) : color; // Make color darker for y-sides
+					p[y] = color; // Update the buffer at position (x, y)
 				}
 			} else { // Render wall with less detail for distant walls
 				reducedLineHeight = lineHeight / 2; // Reduce the line height for distant walls
 				reducedDrawStart = drawStart + reducedLineHeight / 2;
 				reducedDrawEnd = drawEnd - reducedLineHeight / 2;
 
-				for (auto y = reducedDrawStart; y < reducedDrawEnd; y += 2) { // Skip every other pixel
+				for (int y = reducedDrawStart; y < reducedDrawEnd; y += 4, texPos += step) { // Skip every other pixel
 					// Cast the texture coordinate to integer, and mask in case of overflow
 					texY = (int)texPos & TEX_MASK;
-					texPos += step;
 					color = texture[texNum][TEX_WIDTH * texY + texX];
-					color = (side == 1) ? ((color >> 1) & 0x7BEF) : color; // Make color darker for y-sides
+					// color = (side == 1) ? ((color >> 1) & 0x7BEF) : color; // Make color darker for y-sides
 					p[y] = color; // Update the buffer at position (x, y)
 				}
 			}
@@ -307,8 +272,8 @@ int main()
 		endTime = system_timer_current_time();
 		frameTime = (endTime - startTime) / 1000.0;
 
-    	rotSpeed = (perpWallDist < 1.5) ? frameTime * 5.0 : frameTime * 3.0; // Constant value is in radians/second
 		moveSpeed = frameTime * 5.0; //the constant value is in squares/second
+    	rotSpeed = frameTime * 3.0; //the constant value is in radians/second
 
         if (uBit.buttonA.isPressed()) {
 			if(worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false)
@@ -318,10 +283,10 @@ int main()
         }
 		if (uBit.buttonB.isPressed()) {
 			//both camera direction and camera plane must be rotated
-			oldDirX = dirX;
+			double oldDirX = dirX;
 			dirX = dirX * cos(-rotSpeed) - dirY * sin(-rotSpeed);
 			dirY = oldDirX * sin(-rotSpeed) + dirY * cos(-rotSpeed);
-			oldPlaneX = planeX;
+			double oldPlaneX = planeX;
 			planeX = planeX * cos(-rotSpeed) - planeY * sin(-rotSpeed);
 			planeY = oldPlaneX * sin(-rotSpeed) + planeY * cos(-rotSpeed);
 		}
