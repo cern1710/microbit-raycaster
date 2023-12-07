@@ -251,7 +251,7 @@ int main()
 					// Cast the texture coordinate to integer, and mask in case of overflow
 					texY = (int)texPos & TEX_MASK;
 					color = texture[texNum][TEX_WIDTH * texY + texX];
-					color = (side == 1) ? (color & 0xEF9E) : color; // Make color darker for y-sides
+					color = (side == 1) ? (color & 0xEFBB) : color; // Make color darker for y-sides
 					p[y] = color; // Update the buffer at position (x, y)
 				}
 			} else { // Render wall with less detail for distant walls
@@ -272,7 +272,14 @@ int main()
 		frameTime = (endTime - startTime) / 1000.0;
 
 		moveSpeed = frameTime * 5.0; //the constant value is in squares/second
-    	rotSpeed = frameTime * 3.0; //the constant value is in radians/second
+		if (perpWallDist < 1.5)
+			rotSpeed = frameTime * 4.0;
+		else if (perpWallDist < 1.0)
+			rotSpeed = frameTime * 5.0;
+		else if (perpWallDist < 0.5)
+			rotSpeed = frameTime * 6.0;
+    	else
+			rotSpeed = frameTime * 3.0; //the constant value is in radians/second
 
         if (uBit.buttonA.isPressed()) {
 			if(worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false)
