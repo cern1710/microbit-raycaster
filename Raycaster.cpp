@@ -64,10 +64,6 @@ int worldMap[MAP_WIDTH][MAP_HEIGHT] =
   {2,2,2,2,1,2,2,2,2,2,2,1,2,2,2,5,5,5,5,5,5,5,5,5}
 };
 
-float zBuffer[SCREEN_HEIGHT];
-int spriteOrder[NUM_SPRITES];
-float spriteDistance[NUM_SPRITES];
-
 struct Sprite {
 	float x;
 	float y;
@@ -116,7 +112,7 @@ int partition(int* order, float* dist, int left, int right)
     int i = (left - 1);
 
     for (int j = left; j <= right - 1; j++) {
-        if (dist[j] < pivot) {	// Reverse pivot
+        if (dist[j] < pivot) {
             i++;
             swap(dist[i], dist[j]);
             swap(order[i], order[j]);
@@ -170,6 +166,10 @@ int main()
 
 	uint64_t startTime, endTime;
 	uint16_t *p, *tex_ptr;
+
+	float zBuffer[SCREEN_HEIGHT];
+	int spriteOrder[NUM_SPRITES];
+	float spriteDistance[NUM_SPRITES];
 
     float posX = 22, posY = 11.5;      // Initial starting positions
     float dirX = -1, dirY = 0;    	  // Initial direction vector
