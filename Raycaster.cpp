@@ -234,6 +234,8 @@ int main()
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
 
+		float invDet = 1.0 / (planeX * dirY - dirX * planeY);	// Required for correct matrix multiplication
+
 		// Floor casting (horizontal scanline)
 		for (int y = SCREEN_HALF + 1; y < SCREEN_WIDTH; y++) {
 			// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
@@ -386,12 +388,9 @@ int main()
 			float spriteY = sprite[spriteOrder[i]].y - posY;
 
 			//transform sprite with the inverse camera matrix
-			// [ planeX   dirX ] -1                                       [ dirY      -dirX ]
-			// [               ]       =  1/(planeX*dirY-dirX*planeY) *   [                 ]
-			// [ planeY   dirY ]                                          [ -planeY  planeX ]
-
-			float invDet = 1.0 / (planeX * dirY - dirX * planeY);	// Required for correct matrix multiplication
-
+			// [ planeX   dirX ] -1             [ dirY      -dirX ]
+			// [               ]     = invDet * [                 ]
+			// [ planeY   dirY ]                [ -planeY  planeX ]
 			float transformX = invDet * (dirY * spriteX - dirX * spriteY);
 			float transformY = invDet * (-planeY * spriteX + planeX * spriteY); //this is actually the depth inside the screen, that what Z is in 3D, the distance of sprite to player, matching sqrt(spriteDistance[i])
 
@@ -402,10 +401,8 @@ int main()
 			//calculate height of the sprite on screen
 			int spriteHeight = abs(int(SCREEN_WIDTH / (transformY))) / V_DIV; //using "transformY" instead of the real distance prevents fisheye
 			//calculate lowest and highest pixel to fill in current stripe
-			int drawStartY = -spriteHeight / 2 + SCREEN_WIDTH / 2 + vMoveScreen;
-			if(drawStartY < 0) drawStartY = 0;
-			int drawEndY = spriteHeight / 2 + SCREEN_WIDTH / 2 + vMoveScreen;
-			if(drawEndY >= SCREEN_WIDTH) drawEndY = SCREEN_WIDTH - 1;
+			int drawStartY = max(0, -spriteHeight / 2 + SCREEN_WIDTH / 2 + vMoveScreen);
+			int drawEndY = min(SCREEN_WIDTH, spriteHeight / 2 + SCREEN_WIDTH / 2 + vMoveScreen);
 
 			//calculate width of the sprite
 			int spriteWidth = abs(int (SCREEN_WIDTH / (transformY))) / U_DIV; // same as height of sprite, given that it's square
