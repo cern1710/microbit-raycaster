@@ -88,12 +88,12 @@ int main()
 	int mapX, mapY;
 	int stepX, stepY;
 	int hit, side;
-	int texX, texY;
+	int texX;
 	int lineHeight;
 	int drawStart, drawEnd;
 	int16_t color = 0;
 	int texNum;
-	uint16_t *p;
+	uint16_t *p, *tex_ptr;
 	int reducedLineHeight;
 	int reducedDrawStart, reducedDrawEnd;
 
@@ -123,7 +123,6 @@ int main()
 			texture[9][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)) << 5; // Blue bricks
 		}
 	}
-
 	uBit.sleep(200);
 
 	while(1) {
@@ -138,7 +137,7 @@ int main()
 			rayDirY1 = dirY + planeY;
 
 			int p_y = y - SCREEN_HALF;  // Current y-coord compared to horizon
-			float posZ = 0.5 * SCREEN_WIDTH; // Vertical position of the camera.
+			float posZ = SCREEN_HALF; 	// Vertical position of the camera.
 
 			// Horizontal distance from the camera to the floor for the current row.
 			// 0.5 is the z position exactly in the middle between floor and ceiling.
@@ -235,8 +234,7 @@ int main()
 
 			texNum = worldMap[mapX][mapY] - 1;	// Subtract 1 to use texture 0
 
-			wallX = (side == 0) ? posY + perpWallDist * rayDirY :
-			 		posX + perpWallDist * rayDirX;
+			wallX = (side == 0) ? posY + perpWallDist * rayDirY : posX + perpWallDist * rayDirX;
 			wallX -= floor(wallX); // Where is the wall hit
 
 			texX = int(wallX * double(TEX_WIDTH));	// X-coordinate of texture
@@ -247,34 +245,25 @@ int main()
 			texPos = (drawStart - SCREEN_HALF + lineHeight / 2) * step;
 
 			p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH);
+			tex_ptr = (uint16_t *) &texture[texNum][texX];
+
 			if (perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
-				// Loop unrolling (I'm really desperate)
 				if (side == 1) {
-					for (auto y = drawStart; y < drawEnd; y++, texPos += step) {
-						// Cast the texture coordinate to integer, and mask in case of overflow
-						texY = (int)texPos & TEX_MASK;
-						color = (texture[texNum][TEX_WIDTH * texY + texX] & COLOR_MASK);
-						p[y] = color;
-					}
+					// Cast the texture coordinate to integer, and mask in case of overflow
+					for (int y = drawStart; y < drawEnd; y++, texPos += step)
+						p[y] = (tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)] & COLOR_MASK);
 				} else {
-					for (auto y = drawStart; y < drawEnd; y++, texPos += step) {
-						// Cast the texture coordinate to integer, and mask in case of overflow
-						texY = (int)texPos & TEX_MASK;
-						color = texture[texNum][TEX_WIDTH * texY + texX];
-						p[y] = color;
-					}
+					for (int y = drawStart; y < drawEnd; y++, texPos += step)
+						p[y] = tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)];
 				}
 			} else { // Render wall with less detail for distant walls
 				reducedLineHeight = lineHeight / 2; // Reduce the line height for distant walls
 				reducedDrawStart = drawStart + reducedLineHeight / 2;
 				reducedDrawEnd = drawEnd - reducedLineHeight / 2;
 
-				for (int y = reducedDrawStart; y < reducedDrawEnd; y += 4, texPos += step) { // Skip every other pixel
-					// Cast the texture coordinate to integer, and mask in case of overflow
-					texY = (int)texPos & TEX_MASK;
-					color = texture[texNum][TEX_WIDTH * texY + texX];
-					p[y] = color; // Update the buffer at position (x, y)
-				}
+				// Skip every other pixel
+				for (int y = reducedDrawStart; y < reducedDrawEnd; y += 4, texPos += step)
+					p[y] = tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)];
 			}
 		}
 		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
@@ -282,14 +271,7 @@ int main()
 		frameTime = (endTime - startTime) / 1000.0;
 
 		moveSpeed = frameTime * 5.0; //the constant value is in squares/second
-		if (perpWallDist < 1.5)
-			rotSpeed = frameTime * 4.0;
-		else if (perpWallDist < 1.0)
-			rotSpeed = frameTime * 7.0;
-		else if (perpWallDist < 0.5)
-			rotSpeed = frameTime * 10.0;
-    	else
-			rotSpeed = frameTime * 3.0; //the constant value is in radians/second
+		rotSpeed = frameTime * 3.0; //the constant value is in radians/second
 
         if (uBit.buttonA.isPressed()) {
 			if(worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false)
