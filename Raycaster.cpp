@@ -143,8 +143,8 @@ void sortSprites(int* order, float* dist, int amount)
 
     // Restore in reverse order to go from farthest to nearest
     for (int i = 0; i < amount; i++) {
-        dist[i] = sortedDist[amount - i - 1];
-        order[i] = sortedOrder[amount - i - 1];
+        dist[i] = sortedDist[i];
+        order[i] = sortedOrder[i];
     }
     // Free the allocated memory
     delete[] sortedDist;
@@ -178,6 +178,10 @@ int main()
 	float texPos;
 	float rayDirX0, rayDirY0, rayDirX1, rayDirY1;
 	float oldDirX, oldPlaneX;
+
+	float invDet;
+	float spriteX, spriteY;
+	float transformX, transformY;
 
 	int mapX, mapY;
 	int stepX, stepY;
@@ -233,8 +237,6 @@ int main()
 
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
-
-		float invDet = 1.0 / (planeX * dirY - dirX * planeY);	// Required for correct matrix multiplication
 
 		// Floor casting (horizontal scanline)
 		for (int y = SCREEN_HALF + 1; y < SCREEN_WIDTH; y++) {
@@ -380,19 +382,20 @@ int main()
 								(posY - sprite[i].y) * (posY - sprite[i].y); //sqrt not taken, unneeded
 		}
 
+		invDet = 1.0 / (planeX * dirY - dirX * planeY);	// Required for correct matrix multiplication
 		sortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
 		// After sorting the sprites, do the projection and draw them
 		for (int i = 0; i < NUM_SPRITES; i++) {
 			//translate sprite position to relative to camera
-			float spriteX = sprite[spriteOrder[i]].x - posX;
-			float spriteY = sprite[spriteOrder[i]].y - posY;
+			spriteX = sprite[spriteOrder[i]].x - posX;
+			spriteY = sprite[spriteOrder[i]].y - posY;
 
 			//transform sprite with the inverse camera matrix
 			// [ planeX   dirX ] -1             [ dirY      -dirX ]
 			// [               ]     = invDet * [                 ]
 			// [ planeY   dirY ]                [ -planeY  planeX ]
-			float transformX = invDet * (dirY * spriteX - dirX * spriteY);
-			float transformY = invDet * (-planeY * spriteX + planeX * spriteY); //this is actually the depth inside the screen, that what Z is in 3D, the distance of sprite to player, matching sqrt(spriteDistance[i])
+			transformX = invDet * (dirY * spriteX - dirX * spriteY);
+			transformY = invDet * (-planeY * spriteX + planeX * spriteY); 	// This is the depth inside the screen, that what Z is in 3D, the distance of sprite to player, matching sqrt(spriteDistance[i])
 
 			int spriteScreenX = int((SCREEN_HEIGHT / 2) * (1 + transformX / transformY));
 
@@ -406,25 +409,22 @@ int main()
 
 			//calculate width of the sprite
 			int spriteWidth = abs(int (SCREEN_WIDTH / (transformY))) / U_DIV; // same as height of sprite, given that it's square
-			int drawStartX = -spriteWidth / 2 + spriteScreenX;
-			if (drawStartX < 0) drawStartX = 0;
-			int drawEndX = spriteWidth / 2 + spriteScreenX;
-			if (drawEndX > SCREEN_HEIGHT) drawEndX = SCREEN_HEIGHT;
+			int drawStartX = max(0, -spriteWidth / 2 + spriteScreenX);
+			int drawEndX = min(SCREEN_HEIGHT, spriteWidth / 2 + spriteScreenX);
 
 			//loop through every vertical stripe of the sprite on screen
-			for(int stripe = drawStartX; stripe < drawEndX; stripe++)
-			{
+			for (int stripe = drawStartX; stripe < drawEndX; stripe++) {
 				int texX = int(32 * (stripe - (-spriteWidth / 2 + spriteScreenX)) * TEX_WIDTH / spriteWidth) / 32;
 				//the conditions in the if are:
 				//1) it's in front of camera plane so you don't see things behind you
 				//2) ZBuffer, with perpendicular distance
-				if(transformY > 0 && transformY < zBuffer[stripe]) {
-					for(int y = drawStartY; y < drawEndY; y++) {	//for every pixel of the current stripe
+				if (transformY > 0 && transformY < zBuffer[stripe]) {
+					for (int y = drawStartY; y < drawEndY; y++) {	//for every pixel of the current stripe
 						int d = (y - vMoveScreen) * 32 - SCREEN_WIDTH * 16 + spriteHeight * 16; //256 and 128 factors to avoid floats
 						int texY = ((d * TEX_HEIGHT) / spriteHeight) / 32;
 						uint16_t color = texture[sprite[spriteOrder[i]].texture][TEX_WIDTH * texY + texX]; //get current color from the texture
 						p = (uint16_t *) &img[0] + (stripe * SCREEN_WIDTH + y);
-						if((color & 0x00FFFFFF) != 0)
+						if ((color & 0x00FFFFFF) != 0)
 							*p = color; //paint pixel if it isn't black, black is the invisible color
 					}
 				}
@@ -439,9 +439,9 @@ int main()
 		rotSpeed = frameTime * 2.0;  // Constant value is in radians/second
 
 		if (uBit.buttonAB.isPressed()) {
-			if(worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false)
+			if (worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false)
 				posX += dirX * moveSpeed;
-			if(worldMap[int(posX)][int(posY + dirY * moveSpeed)] == false)
+			if (worldMap[int(posX)][int(posY + dirY * moveSpeed)] == false)
 				posY += dirY * moveSpeed;
 		}
         else if (uBit.buttonA.isPressed()) {
