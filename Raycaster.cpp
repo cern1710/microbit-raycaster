@@ -1,6 +1,5 @@
 #include "MicroBit.h"
 #include "Adafruit_ST7735.h"
-#include <vector>
 
 MicroBit uBit;
 
@@ -68,22 +67,23 @@ int main()
 							LCD_PIN_MOSI, LCD_PIN_MISO, LCD_PIN_SCLK);
     lcd->initR(INITR_GREENTAB);
 
-    double posX = 22, posY = 11.5;      // Initial starting positions
-    double dirX = -1, dirY = 0;    	  // Initial direction vector
-    double planeX = 0, planeY = 0.66; // 2D Raycaster of camera plane
-
 	uint64_t startTime, endTime;
+	uint16_t *p, *tex_ptr;
 
-	double cameraX;	// X-coordinate in camera space
-	double rayDirX, rayDirY;
-	double sideDistX, sideDistY;
-	double deltaX, deltaY;
-	double moveSpeed, rotSpeed;
-	double perpWallDist;
-	double frameTime;
-	double wallX;
-	double step;
-	double texPos;
+    float posX = 22, posY = 11.5;      // Initial starting positions
+    float dirX = -1, dirY = 0;    	  // Initial direction vector
+    float planeX = 0, planeY = 0.66; // 2D Raycaster of camera plane
+	float cameraX;	// X-coordinate in camera space
+	float rayDirX, rayDirY;
+	float sideDistX, sideDistY;
+	float deltaX, deltaY;
+	float moveSpeed, rotSpeed;
+	float perpWallDist;
+	float frameTime;
+	float wallX;
+	float step;
+	float texPos;
+	float rayDirX0, rayDirY0, rayDirX1, rayDirY1;
 
 	int mapX, mapY;
 	int stepX, stepY;
@@ -91,27 +91,21 @@ int main()
 	int texX;
 	int lineHeight;
 	int drawStart, drawEnd;
-	int16_t color = 0;
 	int texNum;
-	uint16_t *p, *tex_ptr;
 	int reducedLineHeight;
 	int reducedDrawStart, reducedDrawEnd;
-
-	float rayDirX0, rayDirY0, rayDirX1, rayDirY1;
-
-	std::vector<int16_t> texture[NUM_TEXTURES];
-	for(int i = 0; i < NUM_TEXTURES; i++)
-		texture[i].resize(TEX_WIDTH * TEX_HEIGHT);
+	int16_t color = 0;
 
 	// NOTE: color representation is R-B-G!!!
 	// Used for texture mapping
+	uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
 	for (int x = 0; x < TEX_WIDTH; x++) {
 		for (int y = 0; y < TEX_HEIGHT; y++) {
 			int xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
 			int ycolor = y - y * 32 / TEX_HEIGHT;
 			int xycolor = y * 16 / TEX_HEIGHT + x * 16 / TEX_WIDTH;
 
-			texture[0][TEX_WIDTH * y + x] = (20 * (x != y && x != TEX_WIDTH - y)) << 11; // Red with black cross
+			texture[0][TEX_WIDTH * y + x] = (21 * (x != y && x != TEX_WIDTH - y)) << 11; // Red with black cross
 			texture[1][TEX_WIDTH * y + x] = xycolor << 11 | xycolor << 6 | xycolor; // Sloped greyscale
 			texture[2][TEX_WIDTH * y + x] = xycolor << 6 | xycolor; // Sloped yellow gradient
 			texture[3][TEX_WIDTH * y + x] = xorcolor << 11 | xorcolor << 6 | xorcolor; // XOR greyscale
@@ -125,11 +119,11 @@ int main()
 	}
 	uBit.sleep(200);
 
-	while(1) {
+	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
 
 		// Floor casting (horizontal scanline)
-		for (int y = SCREEN_HALF + 1; y < SCREEN_WIDTH; ++y) {
+		for (int y = SCREEN_HALF + 1; y < SCREEN_WIDTH; y++) {
 			// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
 			rayDirX0 = dirX - planeX;
 			rayDirY0 = dirY - planeY;
@@ -181,7 +175,7 @@ int main()
 
 		// Wall casting
 		for (int x = 0; x < SCREEN_HEIGHT; x++) {
-			cameraX = (2 * x) / (double)SCREEN_HEIGHT - 1;
+			cameraX = (2 * x) / (float)SCREEN_HEIGHT - 1;
 			rayDirX = dirX + (planeX * cameraX);
 			rayDirY = dirY + (planeY * cameraX);
 
@@ -237,7 +231,7 @@ int main()
 			wallX = (side == 0) ? posY + perpWallDist * rayDirY : posX + perpWallDist * rayDirX;
 			wallX -= floor(wallX); // Where is the wall hit
 
-			texX = int(wallX * double(TEX_WIDTH));	// X-coordinate of texture
+			texX = int(wallX * float(TEX_WIDTH));	// X-coordinate of texture
 			if ((side == 0 && rayDirX > 0) || (side == 1 && rayDirY < 0))
 				texX = TEX_WIDTH - texX - 1;
 
@@ -247,18 +241,7 @@ int main()
 			p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH);
 			tex_ptr = (uint16_t *) &texture[texNum][texX];
 
-
-			if (perpWallDist < 0.5) { // Render wall normally for closer walls
-				if (side == 1) {
-					// Cast the texture coordinate to integer, and mask in case of overflow
-					for (int y = drawStart; y < drawEnd; y += 4, texPos += 4 * step)
-						p[y] = (tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)] & COLOR_MASK);
-				} else {
-					for (int y = drawStart; y < drawEnd; y += 4, texPos += 4 * step)
-						p[y] = tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)];
-				}
-			}
-			else if (perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
+			if (perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
 				if (side == 1) {
 					// Cast the texture coordinate to integer, and mask in case of overflow
 					for (int y = drawStart; y < drawEnd; y++, texPos += step)
@@ -273,16 +256,22 @@ int main()
 				reducedDrawEnd = drawEnd - reducedLineHeight / 2;
 
 				// Skip every other pixel
-				for (int y = reducedDrawStart; y < reducedDrawEnd; y += 4, texPos += step)
-					p[y] = tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)];
+				if (side == 1) {
+					// Cast the texture coordinate to integer, and mask in case of overflow
+					for (int y = reducedDrawStart; y < reducedDrawEnd; y += 4, texPos += 4 * step)
+						p[y] = (tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)] & COLOR_MASK);
+				} else {
+					for (int y = reducedDrawStart; y < reducedDrawEnd; y += 4, texPos += 4 * step)
+						p[y] = tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)];
+				}
 			}
 		}
 		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
 		endTime = system_timer_current_time();
 		frameTime = (endTime - startTime) / 1000.0;
 
-		moveSpeed = frameTime * 5.0; //the constant value is in squares/second
-		rotSpeed = frameTime * 3.0; //the constant value is in radians/second
+		moveSpeed = frameTime * 3.0; //the constant value is in squares/second
+		rotSpeed = frameTime * 1.5; //the constant value is in radians/second
 
         if (uBit.buttonA.isPressed()) {
 			if(worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false)
@@ -292,10 +281,10 @@ int main()
         }
 		if (uBit.buttonB.isPressed()) {
 			//both camera direction and camera plane must be rotated
-			double oldDirX = dirX;
+			float oldDirX = dirX;
 			dirX = dirX * cos(-rotSpeed) - dirY * sin(-rotSpeed);
 			dirY = oldDirX * sin(-rotSpeed) + dirY * cos(-rotSpeed);
-			double oldPlaneX = planeX;
+			float oldPlaneX = planeX;
 			planeX = planeX * cos(-rotSpeed) - planeY * sin(-rotSpeed);
 			planeY = oldPlaneX * sin(-rotSpeed) + planeY * cos(-rotSpeed);
 		}
