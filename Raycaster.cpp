@@ -14,17 +14,22 @@ MicroBit uBit;
 
 #define TEX_WIDTH		16
 #define TEX_HEIGHT		16
+#define TEX_MASK		((TEX_HEIGHT) - 1)
+
 #define MAP_WIDTH   	24
 #define MAP_HEIGHT  	24
+
 #define SCREEN_WIDTH    128
 #define SCREEN_HEIGHT   160
-#define TEX_MASK		((TEX_HEIGHT) - 1)
+#define SCREEN_HALF		((SCREEN_WIDTH) / 2)
 
 #define FLOOR_TEXTURE		8
 #define CEILING_TEXTURE		9
 #define DISTANCE_THRESHOLD 	10
 
 #define NUM_TEXTURES	11
+
+#define COLOR_MASK	0xEFBB
 
 int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 {
@@ -54,9 +59,6 @@ int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 	{4,4,4,4,4,4,4,4,4,4,1,1,1,2,2,2,2,2,2,3,3,3,3,3}
 };
 
-// TODO: create a door animation by adjusting line height for certain walls (based on collision)
-// TODO: create less fucky textures
-// TODO: optimize program (it gets slow when it's close to a wall)
 int main()
 {
 	uBit.init();
@@ -97,6 +99,9 @@ int main()
 
 	float rayDirX0, rayDirY0, rayDirX1, rayDirY1;
 
+	int texY_arr[2];
+	int16_t color_arr[2];
+
 	std::vector<int16_t> texture[NUM_TEXTURES];
 	for(int i = 0; i < NUM_TEXTURES; i++)
 		texture[i].resize(TEX_WIDTH * TEX_HEIGHT);
@@ -128,14 +133,14 @@ int main()
 		startTime = system_timer_current_time(); // Time at start of the loop
 
 		// Floor casting (horizontal scanline)
-		for (int y = SCREEN_WIDTH / 2 + 1; y < SCREEN_WIDTH; y++) {
+		for (auto y = SCREEN_HALF + 1; y < SCREEN_WIDTH; ++y) {
 			// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
 			rayDirX0 = dirX - planeX;
 			rayDirY0 = dirY - planeY;
 			rayDirX1 = dirX + planeX;
 			rayDirY1 = dirY + planeY;
 
-			int p_y = y - SCREEN_WIDTH / 2;  // Current y-coord compared to horizon
+			int p_y = y - SCREEN_HALF;  // Current y-coord compared to horizon
 			float posZ = 0.5 * SCREEN_WIDTH; // Vertical position of the camera.
 
 			// Horizontal distance from the camera to the floor for the current row.
@@ -152,7 +157,7 @@ int main()
 			float floorY = posY + rowDistance * rayDirY0;
 
 			// Linear interpolation for texture mapping
-			for(int x = 0; x < SCREEN_HEIGHT; ++x) {
+			for (auto x = 0; x < SCREEN_HEIGHT; ++x) {
 				// the cell coord is simply got from the integer parts of floorX and floorY
 				int cellX = (int)(floorX);
 				int cellY = (int)(floorY);
@@ -179,7 +184,7 @@ int main()
 		}
 
 		// Wall casting
-		for (int x = 0; x < SCREEN_HEIGHT; x++) {
+		for (auto x = 0; x < SCREEN_HEIGHT; ++x) {
 			cameraX = (2 * x) / (double)SCREEN_HEIGHT - 1;
 			rayDirX = dirX + (planeX * cameraX);
 			rayDirY = dirY + (planeY * cameraX);
@@ -222,13 +227,12 @@ int main()
 				if (worldMap[mapX][mapY] > 0) hit = 1;
 			}
 
-			perpWallDist = (side == 0) ? (sideDistX - deltaX) :
-							(sideDistY - deltaY);	// Calculate distance of perpendicular ray
+			perpWallDist = (side == 0) ? (sideDistX - deltaX) : (sideDistY - deltaY); // Calculate distance of perpendicular ray
 			lineHeight = (int)(SCREEN_WIDTH / perpWallDist);	// Calculate height of line to draw on screen
 
 			// Calculate lowest and highest pixel to fill in current stripe
-			drawStart = -(lineHeight / 2) + (SCREEN_WIDTH / 2);
-			drawEnd = (lineHeight / 2) + (SCREEN_WIDTH / 2);
+			drawStart = -(lineHeight / 2) + (SCREEN_HALF);
+			drawEnd = (lineHeight / 2) + (SCREEN_HALF);
 			if (drawStart < 0) drawStart = 0;
 			if (drawEnd >= SCREEN_WIDTH) drawEnd = SCREEN_WIDTH - 1;
 
@@ -243,16 +247,47 @@ int main()
 				texX = TEX_WIDTH - texX - 1;
 
 			step = 1.0 * TEX_HEIGHT / lineHeight;
-			texPos = (drawStart - SCREEN_WIDTH / 2 + lineHeight / 2) * step;
+			texPos = (drawStart - SCREEN_HALF + lineHeight / 2) * step;
 
 			p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH);
 			if (perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
-				for (int y = drawStart; y < drawEnd; y++, texPos += step) {
-					// Cast the texture coordinate to integer, and mask in case of overflow
-					texY = (int)texPos & TEX_MASK;
-					color = texture[texNum][TEX_WIDTH * texY + texX];
-					color = (side == 1) ? (color & 0xEFBB) : color; // Make color darker for y-sides
-					p[y] = color; // Update the buffer at position (x, y)
+				// Loop unrolling (I'm really desperate)
+				if (side == 1) {
+					for (auto y = drawStart; y < drawEnd; y += 4, texPos += 4 * step) {
+						// Cast the texture coordinate to integer, and mask in case of overflow
+						texY_arr[0] = (int)texPos & TEX_MASK;
+						texY_arr[1] = (int)(texPos + step) & TEX_MASK;
+						texY_arr[2] = (int)(texPos + step * 2) & TEX_MASK;
+						texY_arr[3] = (int)(texPos + step * 3) & TEX_MASK;
+
+						color_arr[0] = (texture[texNum][TEX_WIDTH * texY_arr[0] + texX]) & COLOR_MASK;
+						color_arr[1] = (texture[texNum][TEX_WIDTH * texY_arr[1] + texX]) & COLOR_MASK;
+						color_arr[2] = (texture[texNum][TEX_WIDTH * texY_arr[2] + texX]) & COLOR_MASK;
+						color_arr[3] = (texture[texNum][TEX_WIDTH * texY_arr[3] + texX]) & COLOR_MASK;
+
+						p[y] 	 = color_arr[0];
+						p[y + 1] = color_arr[1];
+						p[y + 2] = color_arr[2];
+						p[y + 3] = color_arr[3];
+					}
+				} else {
+					for (auto y = drawStart; y < drawEnd; y += 4, texPos += 4 * step) {
+						// Cast the texture coordinate to integer, and mask in case of overflow
+						texY_arr[0] = (int)texPos & TEX_MASK;
+						texY_arr[1] = (int)(texPos + step) & TEX_MASK;
+						texY_arr[2] = (int)(texPos + step * 2) & TEX_MASK;
+						texY_arr[3] = (int)(texPos + step * 3) & TEX_MASK;
+
+						color_arr[0] = texture[texNum][TEX_WIDTH * texY_arr[0] + texX];
+						color_arr[1] = texture[texNum][TEX_WIDTH * texY_arr[1] + texX];
+						color_arr[2] = texture[texNum][TEX_WIDTH * texY_arr[2] + texX];
+						color_arr[3] = texture[texNum][TEX_WIDTH * texY_arr[3] + texX];
+
+						p[y] 	 = color_arr[0];
+						p[y + 1] = color_arr[1];
+						p[y + 2] = color_arr[2];
+						p[y + 3] = color_arr[3];
+					}
 				}
 			} else { // Render wall with less detail for distant walls
 				reducedLineHeight = lineHeight / 2; // Reduce the line height for distant walls
