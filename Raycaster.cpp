@@ -24,11 +24,16 @@ MicroBit uBit;
 #define SCREEN_HALF		((SCREEN_WIDTH) / 2)
 
 #define FLOOR_TEXTURE		8
-#define CEILING_TEXTURE		5
+#define CEILING_TEXTURE		9
 #define DISTANCE_THRESHOLD 	10
 
 #define NUM_TEXTURES	11
 #define NUM_SPRITES		19
+
+// Parameters for scaling and moving the sprites
+#define U_DIV 	1
+#define V_DIV 	1
+#define V_MOVE 	0.0
 
 #define COLOR_MASK	0xEFBB
 
@@ -67,7 +72,7 @@ float spriteDistance[NUM_SPRITES];
 struct Sprite {
 	float x;
 	float y;
-	int16_t texture;
+	int texture;
 };
 
 Sprite sprite[NUM_SPRITES] =
@@ -180,7 +185,7 @@ int main()
 		for (int y = 0; y < TEX_HEIGHT; y++) {
 			int xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
 			int xcolor = x - x * 32 / TEX_HEIGHT;
-			int ycolor = y - y * 32 / TEX_HEIGHT;
+			// int ycolor = y - y * 32 / TEX_HEIGHT;
 			int xycolor = y * 16 / TEX_HEIGHT + x * 16 / TEX_WIDTH;
 
 			texture[0][TEX_WIDTH * y + x] = (21 * (x != y && x != TEX_WIDTH - y)) << 11; // Red with black cross
@@ -198,10 +203,21 @@ int main()
 			else
 				texture[8][TEX_WIDTH * y + x] = 0xFFFF; // White
 
-			texture[9][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)); // Green bricks
-			texture[10][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)) << 5; // Blue bricks
+			texture[9][TEX_WIDTH * y + x] = (0b1010000001001001 * (x % 4 && y % 4)); // Blue bricks
+			texture[10][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)); // Green bricks
 		}
 	}
+
+	// for (int x = 0; x < TEX_WIDTH; x++)
+	// 	for (int y = 0; y < TEX_HEIGHT; y++)
+			// texture[10][TEX_WIDTH * y + x] = 0b1010000001001001; // Black
+	// texture[10][TEX_WIDTH * 15 + 8] = 1;
+	// texture[10][TEX_WIDTH * 15 + 9] = 1;
+	// texture[10][TEX_WIDTH * 14 + 8] = 1;
+	// texture[10][TEX_WIDTH * 14 + 9] = 1;
+	// texture[10][TEX_WIDTH * 13 + 8] = 1;
+	// texture[10][TEX_WIDTH * 13 + 9] = 1;
+
 	uBit.sleep(200);
 
 	while (1) {
@@ -246,15 +262,13 @@ int main()
 
 				// We've inversed ceiling and floor!!!
 				color = texture[CEILING_TEXTURE][TEX_WIDTH * ty + tx];
-				color = (color >> 1) & 0x7BEF; // make a bit darker
 				p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + y);
-                *p = color; // Update the buffer at position (x, y)
+                *p = color; // make a bit darker
 
-				//ceiling (symmetrical, at screenHeight - y - 1 instead of y)
+				// Floor (symmetrical, at screenHeight - y - 1 instead of y)
 				color = texture[FLOOR_TEXTURE][TEX_WIDTH * ty + tx];
-				color = (color >> 1) & 0x7BEF; // make a bit darker
 				p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + SCREEN_WIDTH - y - 1);
-                *p = color; // Update the buffer at position (x, y)
+                *p = (color >> 1) & 0x7BEF; // make a bit darker
 			}
 		}
 
@@ -378,14 +392,10 @@ int main()
 
 			int spriteScreenX = int((SCREEN_HEIGHT / 2) * (1 + transformX / transformY));
 
-			//parameters for scaling and moving the sprites
-			#define uDiv 1
-			#define vDiv 1
-			#define vMove 0.0
-			int vMoveScreen = int(vMove / transformY);
+			int vMoveScreen = int(V_MOVE / transformY);
 
 			//calculate height of the sprite on screen
-			int spriteHeight = abs(int(SCREEN_WIDTH / (transformY))) / vDiv; //using "transformY" instead of the real distance prevents fisheye
+			int spriteHeight = abs(int(SCREEN_WIDTH / (transformY))) / V_DIV; //using "transformY" instead of the real distance prevents fisheye
 			//calculate lowest and highest pixel to fill in current stripe
 			int drawStartY = -spriteHeight / 2 + SCREEN_WIDTH / 2 + vMoveScreen;
 			if(drawStartY < 0) drawStartY = 0;
@@ -393,7 +403,7 @@ int main()
 			if(drawEndY >= SCREEN_WIDTH) drawEndY = SCREEN_WIDTH - 1;
 
 			//calculate width of the sprite
-			int spriteWidth = abs(int (SCREEN_WIDTH / (transformY))) / uDiv; // same as height of sprite, given that it's square
+			int spriteWidth = abs(int (SCREEN_WIDTH / (transformY))) / U_DIV; // same as height of sprite, given that it's square
 			int drawStartX = -spriteWidth / 2 + spriteScreenX;
 			if (drawStartX < 0) drawStartX = 0;
 			int drawEndX = spriteWidth / 2 + spriteScreenX;
