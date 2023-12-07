@@ -110,25 +110,33 @@ void swap(T& a, T& b)
     b = temp;
 }
 
-void bubbleSortSprites(int* order, float* dist, int amount)
+int partition(int* order, float* dist, int left, int right)
 {
-    bool swapped;
-    for (int i = 0; i < amount - 1; i++) {
-        swapped = false;
-        for (int j = 0; j < amount - i - 1; j++) {
-            if (dist[j] < dist[j + 1]) {
-                // Swap the distances and the order
-                swap(dist[j], dist[j + 1]);
-                swap(order[j], order[j + 1]);
-                swapped = true;
-            }
+    float pivot = dist[right];
+    int i = (left - 1);
+
+    for (int j = left; j <= right - 1; j++) {
+        if (dist[j] < pivot) {	// Reverse pivot
+            i++;
+            swap(dist[i], dist[j]);
+            swap(order[i], order[j]);
         }
-        if (!swapped) // Break if no two elements swapped by inner loop
-            break;
+    }
+    swap(dist[i + 1], dist[right]);
+    swap(order[i + 1], order[right]);
+    return (i + 1);
+}
+
+void quickSort(int* order, float* dist, int left, int right)
+{
+    if (left < right) {
+        int pi = partition(order, dist, left, right);
+        quickSort(order, dist, left, pi - 1);
+        quickSort(order, dist, pi + 1, right);
     }
 }
 
-//sort the sprites based on distance
+// Sort the sprites based on distance
 void sortSprites(int* order, float* dist, int amount)
 {
     // Allocate memory for dynamic arrays for sorted value's arrays
@@ -139,12 +147,12 @@ void sortSprites(int* order, float* dist, int amount)
         sortedDist[i] = dist[i];
         sortedOrder[i] = order[i];
     }
-    bubbleSortSprites(sortedOrder, sortedDist, amount);
+	quickSort(order, dist, 0, amount - 1);
 
     // Restore in reverse order to go from farthest to nearest
     for (int i = 0; i < amount; i++) {
-        dist[i] = sortedDist[i];
-        order[i] = sortedOrder[i];
+        dist[i] = sortedDist[amount - i - 1];
+        order[i] = sortedOrder[amount - i - 1];
     }
     // Free the allocated memory
     delete[] sortedDist;
