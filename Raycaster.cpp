@@ -24,7 +24,7 @@ MicroBit uBit;
 #define SCREEN_HALF		((SCREEN_WIDTH) / 2)
 
 #define FLOOR_TEXTURE		8
-#define CEILING_TEXTURE		9
+#define CEILING_TEXTURE		5
 #define DISTANCE_THRESHOLD 	10
 
 #define NUM_TEXTURES	11
@@ -98,7 +98,8 @@ Sprite sprite[NUM_SPRITES] =
   {10.5, 15.8,8},
 };
 
-void bubbleSortSprites(int* order, float* dist, int amount) {
+void bubbleSortSprites(int* order, float* dist, int amount)
+{
     bool swapped;
     for (int i = 0; i < amount - 1; i++) {
         swapped = false;
@@ -159,6 +160,7 @@ int main()
 	float step;
 	float texPos;
 	float rayDirX0, rayDirY0, rayDirX1, rayDirY1;
+	float oldDirX, oldPlaneX;
 
 	int mapX, mapY;
 	int stepX, stepY;
@@ -177,6 +179,7 @@ int main()
 	for (int x = 0; x < TEX_WIDTH; x++) {
 		for (int y = 0; y < TEX_HEIGHT; y++) {
 			int xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
+			int xcolor = x - x * 32 / TEX_HEIGHT;
 			int ycolor = y - y * 32 / TEX_HEIGHT;
 			int xycolor = y * 16 / TEX_HEIGHT + x * 16 / TEX_WIDTH;
 
@@ -186,10 +189,17 @@ int main()
 			texture[3][TEX_WIDTH * y + x] = xorcolor << 11 | xorcolor << 6 | xorcolor; // XOR greyscale
 			texture[4][TEX_WIDTH * y + x] = xorcolor; // XOR green
 			texture[5][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)) << 11; // Red bricks
-			texture[6][TEX_WIDTH * y + x] = ycolor << 11; // Red gradient
+			texture[6][TEX_WIDTH * y + x] = xcolor << 11; // Red gradient
 			texture[7][TEX_WIDTH * y + x] = 16 + 16*32 + 16*2048; // Flat grey texture
-			texture[8][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)); // Green bricks
-			texture[9][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)) << 5; // Blue bricks
+
+			// Twin Peaks floor pattern
+        	if (((y + (x % 8 < 4 ? x : 7 - x)) / 4) % 2 == 0)
+				texture[8][TEX_WIDTH * y + x] = 0; // Black
+			else
+				texture[8][TEX_WIDTH * y + x] = 0xFFFF; // White
+
+			texture[9][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)); // Green bricks
+			texture[10][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)) << 5; // Blue bricks
 		}
 	}
 	uBit.sleep(200);
@@ -348,8 +358,9 @@ int main()
 			spriteOrder[i] = i;
 			spriteDistance[i] = ((posX - sprite[i].x) * (posX - sprite[i].x) + (posY - sprite[i].y) * (posY - sprite[i].y)); //sqrt not taken, unneeded
 		}
+
 		sortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
-		//after sorting the sprites, do the projection and draw them
+		// after sorting the sprites, do the projection and draw them
 		for (int i = 0; i < NUM_SPRITES; i++) {
 			//translate sprite position to relative to camera
 			float spriteX = sprite[spriteOrder[i]].x - posX;
@@ -415,18 +426,26 @@ int main()
 		moveSpeed = frameTime * 3.0; //the constant value is in squares/second
 		rotSpeed = frameTime * 1.5; //the constant value is in radians/second
 
-        if (uBit.buttonA.isPressed()) {
+		if (uBit.buttonAB.isPressed()) {
 			if(worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false)
 				posX += dirX * moveSpeed;
 			if(worldMap[int(posX)][int(posY + dirY * moveSpeed)] == false)
 				posY += dirY * moveSpeed;
+		}
+        else if (uBit.buttonA.isPressed()) {
+			oldDirX = dirX;
+			dirX = dirX * cos(rotSpeed) - dirY * sin(rotSpeed);
+			dirY = oldDirX * sin(rotSpeed) + dirY * cos(rotSpeed);
+			oldPlaneX = planeX;
+			planeX = planeX * cos(rotSpeed) - planeY * sin(rotSpeed);
+			planeY = oldPlaneX * sin(rotSpeed) + planeY * cos(rotSpeed);
         }
-		if (uBit.buttonB.isPressed()) {
+		else if (uBit.buttonB.isPressed()) {
 			//both camera direction and camera plane must be rotated
-			float oldDirX = dirX;
+			oldDirX = dirX;
 			dirX = dirX * cos(-rotSpeed) - dirY * sin(-rotSpeed);
 			dirY = oldDirX * sin(-rotSpeed) + dirY * cos(-rotSpeed);
-			float oldPlaneX = planeX;
+			oldPlaneX = planeX;
 			planeX = planeX * cos(-rotSpeed) - planeY * sin(-rotSpeed);
 			planeY = oldPlaneX * sin(-rotSpeed) + planeY * cos(-rotSpeed);
 		}
