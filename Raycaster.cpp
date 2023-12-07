@@ -1,5 +1,6 @@
 #include "MicroBit.h"
 #include "Adafruit_ST7735.h"
+#include <vector>
 
 MicroBit uBit;
 
@@ -27,36 +28,110 @@ MicroBit uBit;
 #define DISTANCE_THRESHOLD 	10
 
 #define NUM_TEXTURES	11
+#define NUM_SPRITES		19
 
 #define COLOR_MASK	0xEFBB
 
 int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 {
-	{4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,7,7,7,7,7,7,7,7},
-	{4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0,0,0,7},
-	{4,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7},
-	{4,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7},
-	{4,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0,0,0,7},
-	{4,0,4,0,0,0,0,5,5,5,5,5,5,5,5,5,7,7,0,7,7,7,7,7},
-	{4,0,5,0,0,0,0,5,0,5,0,5,0,5,0,5,7,0,0,0,7,7,7,1},
-	{4,0,6,0,0,0,0,5,0,0,0,0,0,0,0,5,7,0,0,0,0,0,0,8},
-	{4,0,7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,7,7,1},
-	{4,0,8,0,0,0,0,5,0,0,0,0,0,0,0,5,7,0,0,0,0,0,0,8},
-	{4,0,0,0,0,0,0,5,0,0,0,0,0,0,0,5,7,0,0,0,7,7,7,1},
-	{4,0,0,0,0,0,0,5,5,5,5,0,5,5,5,5,7,7,7,7,7,7,7,1},
-	{6,6,6,6,6,6,6,6,6,6,6,0,6,6,6,6,6,6,6,6,6,6,6,6},
-	{8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4},
-	{6,6,6,6,6,6,0,6,6,6,6,0,6,6,6,6,6,6,6,6,6,6,6,6},
-	{4,4,4,4,4,4,0,4,4,4,6,0,6,2,2,2,2,2,2,2,3,3,3,3},
-	{4,0,0,0,0,0,0,0,0,4,6,0,6,2,0,0,0,0,0,2,0,0,0,2},
-	{4,0,0,0,0,0,0,0,0,0,0,0,6,2,0,0,5,0,0,2,0,0,0,2},
-	{4,0,0,0,0,0,0,0,0,4,6,0,6,2,0,0,0,0,0,2,2,0,2,2},
-	{4,0,6,0,6,0,0,0,0,4,5,0,0,0,0,0,5,0,0,0,0,0,0,2},
-	{4,0,0,5,0,0,0,0,0,4,4,0,6,2,0,0,0,0,0,2,2,0,2,2},
-	{4,0,6,0,6,0,0,0,0,4,3,0,6,2,0,0,5,0,0,2,0,0,0,2},
-	{4,0,0,0,0,0,0,0,0,4,2,0,7,2,0,0,0,0,0,2,0,0,0,2},
-	{4,4,4,4,4,4,4,4,4,4,1,1,1,2,2,2,2,2,2,3,3,3,3,3}
+  {8,8,8,8,8,8,8,8,8,8,8,4,4,6,4,4,6,4,6,4,4,4,6,4},
+  {8,0,0,0,0,0,0,0,0,0,8,4,0,0,0,0,0,0,0,0,0,0,0,4},
+  {8,0,3,3,0,0,0,0,0,8,8,4,0,0,0,0,0,0,0,0,0,0,0,6},
+  {8,0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6},
+  {8,0,3,3,0,0,0,0,0,8,8,4,0,0,0,0,0,0,0,0,0,0,0,4},
+  {8,0,0,0,0,0,0,0,0,0,8,4,0,0,0,0,0,6,6,6,0,6,4,6},
+  {8,8,8,8,0,8,8,8,8,8,8,4,4,4,4,4,4,6,0,0,0,0,0,6},
+  {7,7,7,7,0,7,7,7,7,0,8,0,8,0,8,0,8,4,0,4,0,6,0,6},
+  {7,7,0,0,0,0,0,0,7,8,0,8,0,8,0,8,8,6,0,0,0,0,0,6},
+  {7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,8,6,0,0,0,0,0,4},
+  {7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,8,6,0,6,0,6,0,6},
+  {7,7,0,0,0,0,0,0,7,8,0,8,0,8,0,8,8,6,4,6,0,6,6,6},
+  {7,7,7,7,0,7,7,7,7,8,8,4,0,6,8,4,8,3,3,3,0,3,3,3},
+  {2,2,2,2,0,2,2,2,2,4,6,4,0,0,6,0,6,3,0,0,0,0,0,3},
+  {2,2,0,0,0,0,0,2,2,4,0,0,0,0,0,0,4,3,0,0,0,0,0,3},
+  {2,0,0,0,0,0,0,0,2,4,0,0,0,0,0,0,4,3,0,0,0,0,0,3},
+  {1,0,0,0,0,0,0,0,1,4,4,4,4,4,6,0,6,3,3,0,0,0,3,3},
+  {2,0,0,0,0,0,0,0,2,2,2,1,2,2,2,6,6,0,0,5,0,5,0,5},
+  {2,2,0,0,0,0,0,2,2,2,0,0,0,2,2,0,5,0,5,0,0,0,5,5},
+  {2,0,0,0,0,0,0,0,2,0,0,0,0,0,2,5,0,5,0,5,0,5,0,5},
+  {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5},
+  {2,0,0,0,0,0,0,0,2,0,0,0,0,0,2,5,0,5,0,5,0,5,0,5},
+  {2,2,0,0,0,0,0,2,2,2,0,0,0,2,2,0,5,0,5,0,0,0,5,5},
+  {2,2,2,2,1,2,2,2,2,2,2,1,2,2,2,5,5,5,5,5,5,5,5,5}
 };
+
+float zBuffer[SCREEN_HEIGHT];
+int spriteOrder[NUM_SPRITES];
+float spriteDistance[NUM_SPRITES];
+
+struct Sprite {
+	float x;
+	float y;
+	int16_t texture;
+};
+
+Sprite sprite[NUM_SPRITES] =
+{
+  {20.5, 11.5, 10}, //green light in front of playerstart
+  //green lights in every room
+  {18.5,4.5, 10},
+  {10.0,4.5, 10},
+  {10.0,12.5,10},
+  {3.5, 6.5, 10},
+  {3.5, 20.5,10},
+  {3.5, 14.5,10},
+  {14.5,20.5,10},
+
+  // Row of pillars in front of wall
+  {18.5, 10.5, 9},
+  {18.5, 11.5, 9},
+  {18.5, 12.5, 9},
+
+  // Barrels around the map
+  {21.5, 1.5, 8},
+  {15.5, 1.5, 8},
+  {16.0, 1.8, 8},
+  {16.2, 1.2, 8},
+  {3.5,  2.5, 8},
+  {9.5, 15.5, 8},
+  {10.0, 15.1,8},
+  {10.5, 15.8,8},
+};
+
+void bubbleSortSprites(int* order, float* dist, int amount) {
+    bool swapped;
+    for (int i = 0; i < amount - 1; i++) {
+        swapped = false;
+        for (int j = 0; j < amount - i - 1; j++) {
+            if (dist[j] < dist[j + 1]) {
+                // Swap the distances and the order
+                std::swap(dist[j], dist[j + 1]);
+                std::swap(order[j], order[j + 1]);
+                swapped = true;
+            }
+        }
+        // If no two elements were swapped by inner loop, then break
+        if (!swapped) {
+            break;
+        }
+    }
+}
+
+//sort the sprites based on distance
+void sortSprites(int* order, float* dist, int amount)
+{
+	std::vector<std::pair<float, int>> sprites(amount);
+	for (int i = 0; i < amount; i++) {
+		sprites[i].first = dist[i];
+		sprites[i].second = order[i];
+	}
+	bubbleSortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
+	// restore in reverse order to go from farthest to nearest
+	for (int i = 0; i < amount; i++) {
+		dist[i] = sprites[amount - i - 1].first;
+		order[i] = sprites[amount - i - 1].second;
+	}
+}
 
 int main()
 {
@@ -265,7 +340,74 @@ int main()
 						p[y] = tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)];
 				}
 			}
+			zBuffer[x] = perpWallDist;
 		}
+
+		// Sprite casting
+		for (int i = 0; i < NUM_SPRITES; i++) {
+			spriteOrder[i] = i;
+			spriteDistance[i] = ((posX - sprite[i].x) * (posX - sprite[i].x) + (posY - sprite[i].y) * (posY - sprite[i].y)); //sqrt not taken, unneeded
+		}
+		sortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
+		//after sorting the sprites, do the projection and draw them
+		for (int i = 0; i < NUM_SPRITES; i++) {
+			//translate sprite position to relative to camera
+			float spriteX = sprite[spriteOrder[i]].x - posX;
+			float spriteY = sprite[spriteOrder[i]].y - posY;
+
+			//transform sprite with the inverse camera matrix
+			// [ planeX   dirX ] -1                                       [ dirY      -dirX ]
+			// [               ]       =  1/(planeX*dirY-dirX*planeY) *   [                 ]
+			// [ planeY   dirY ]                                          [ -planeY  planeX ]
+
+			float invDet = 1.0 / (planeX * dirY - dirX * planeY); //required for correct matrix multiplication
+
+			float transformX = invDet * (dirY * spriteX - dirX * spriteY);
+			float transformY = invDet * (-planeY * spriteX + planeX * spriteY); //this is actually the depth inside the screen, that what Z is in 3D, the distance of sprite to player, matching sqrt(spriteDistance[i])
+
+			int spriteScreenX = int((SCREEN_HEIGHT / 2) * (1 + transformX / transformY));
+
+			//parameters for scaling and moving the sprites
+			#define uDiv 1
+			#define vDiv 1
+			#define vMove 0.0
+			int vMoveScreen = int(vMove / transformY);
+
+			//calculate height of the sprite on screen
+			int spriteHeight = abs(int(SCREEN_WIDTH / (transformY))) / vDiv; //using "transformY" instead of the real distance prevents fisheye
+			//calculate lowest and highest pixel to fill in current stripe
+			int drawStartY = -spriteHeight / 2 + SCREEN_WIDTH / 2 + vMoveScreen;
+			if(drawStartY < 0) drawStartY = 0;
+			int drawEndY = spriteHeight / 2 + SCREEN_WIDTH / 2 + vMoveScreen;
+			if(drawEndY >= SCREEN_WIDTH) drawEndY = SCREEN_WIDTH - 1;
+
+			//calculate width of the sprite
+			int spriteWidth = abs(int (SCREEN_WIDTH / (transformY))) / uDiv; // same as height of sprite, given that it's square
+			int drawStartX = -spriteWidth / 2 + spriteScreenX;
+			if (drawStartX < 0) drawStartX = 0;
+			int drawEndX = spriteWidth / 2 + spriteScreenX;
+			if (drawEndX > SCREEN_HEIGHT) drawEndX = SCREEN_HEIGHT;
+
+			//loop through every vertical stripe of the sprite on screen
+			for(int stripe = drawStartX; stripe < drawEndX; stripe++)
+			{
+				int texX = int(32 * (stripe - (-spriteWidth / 2 + spriteScreenX)) * TEX_WIDTH / spriteWidth) / 32;
+				//the conditions in the if are:
+				//1) it's in front of camera plane so you don't see things behind you
+				//2) ZBuffer, with perpendicular distance
+				if(transformY > 0 && transformY < zBuffer[stripe]) {
+					for(int y = drawStartY; y < drawEndY; y++) {	//for every pixel of the current stripe
+						int d = (y - vMoveScreen) * 32 - SCREEN_WIDTH * 16 + spriteHeight * 16; //256 and 128 factors to avoid floats
+						int texY = ((d * TEX_HEIGHT) / spriteHeight) / 32;
+						uint16_t color = texture[sprite[spriteOrder[i]].texture][TEX_WIDTH * texY + texX]; //get current color from the texture
+						p = (uint16_t *) &img[0] + (stripe * SCREEN_WIDTH + y);
+						if((color & 0x00FFFFFF) != 0)
+							*p = color; //paint pixel if it isn't black, black is the invisible color
+					}
+				}
+			}
+		}
+
 		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
 		endTime = system_timer_current_time();
 		frameTime = (endTime - startTime) / 1000.0;
