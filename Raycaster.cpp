@@ -186,8 +186,7 @@ int main()
 	int lineHeight;
 	int drawStart, drawEnd;
 	int texNum;
-	int reducedLineHeight;
-	int reducedDrawStart, reducedDrawEnd;
+	int skipStep;
 	int16_t color = 0;
 
 	// NOTE: color representation is R-B-G!!!
@@ -260,7 +259,7 @@ int main()
 			float floorY = posY + rowDistance * rayDirY0;
 
 			// Linear interpolation for texture mapping
-			for (int x = 0; x < SCREEN_HEIGHT; ++x) {
+			for (int x = 0; x < SCREEN_HEIGHT; x++) {
 				// the cell coord is simply got from the integer parts of floorX and floorY
 				int cellX = (int)(floorX);
 				int cellY = (int)(floorY);
@@ -332,10 +331,8 @@ int main()
 			lineHeight = (int)(SCREEN_WIDTH / perpWallDist);	// Calculate height of line to draw on screen
 
 			// Calculate lowest and highest pixel to fill in current stripe
-			drawStart = SCREEN_HALF - (lineHeight / 2);
-			drawEnd   = SCREEN_HALF + (lineHeight / 2);
-			if (drawStart < 0) drawStart = 0;
-			if (drawEnd >= SCREEN_WIDTH) drawEnd = SCREEN_WIDTH - 1;
+			drawStart = max(0, SCREEN_HALF - (lineHeight / 2));
+			drawEnd   = min(SCREEN_WIDTH, SCREEN_HALF + (lineHeight / 2));
 
 			texNum = worldMap[mapX][mapY] - 1;	// Subtract 1 to use texture 0
 
@@ -353,40 +350,36 @@ int main()
 			tex_ptr = (uint16_t *) &texture[texNum][texX];
 
 			if (perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
-				if (side == 1) {
-					// Cast the texture coordinate to integer, and mask in case of overflow
-					for (int y = drawStart; y < drawEnd; y++, texPos += step)
-						p[y] = (tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)] & COLOR_MASK);
-				} else {
-					for (int y = drawStart; y < drawEnd; y++, texPos += step)
-						p[y] = tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)];
-				}
+				skipStep = 1;
 			} else { // Render wall with less detail for distant walls
-				reducedLineHeight = lineHeight / 2; // Reduce the line height for distant walls
-				reducedDrawStart = drawStart + reducedLineHeight / 2;
-				reducedDrawEnd = drawEnd - reducedLineHeight / 2;
-
-				// Skip every other pixel
-				if (side == 1) {
-					// Cast the texture coordinate to integer, and mask in case of overflow
-					for (int y = reducedDrawStart; y < reducedDrawEnd; y += 4, texPos += 4 * step)
-						p[y] = (tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)] & COLOR_MASK);
-				} else {
-					for (int y = reducedDrawStart; y < reducedDrawEnd; y += 4, texPos += 4 * step)
-						p[y] = tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)];
-				}
+				skipStep = 4;
+				lineHeight /= 2;  // Reduce line height for distant walls
+				drawStart += lineHeight / 2;
+				drawEnd -= lineHeight / 2;
 			}
-			zBuffer[x] = perpWallDist;
+
+			// Texture rendering
+			if (side == 1) {
+				// Cast the texture coordinate to integer, and mask in case of overflow
+				for (int y = drawStart; y < drawEnd; y += skipStep, texPos += skipStep * step) {
+					p[y] = (tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)] & COLOR_MASK);
+				}
+			} else {
+				for (int y = drawStart; y < drawEnd; y += skipStep, texPos += skipStep * step)
+					p[y] = tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)];
+			}
+			zBuffer[x] = perpWallDist;	// Update z buffer for current x value on screen
 		}
 
 		// Sprite casting
 		for (int i = 0; i < NUM_SPRITES; i++) {
 			spriteOrder[i] = i;
-			spriteDistance[i] = ((posX - sprite[i].x) * (posX - sprite[i].x) + (posY - sprite[i].y) * (posY - sprite[i].y)); //sqrt not taken, unneeded
+			spriteDistance[i] = (posX - sprite[i].x) * (posX - sprite[i].x) +
+								(posY - sprite[i].y) * (posY - sprite[i].y); //sqrt not taken, unneeded
 		}
 
 		sortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
-		// after sorting the sprites, do the projection and draw them
+		// After sorting the sprites, do the projection and draw them
 		for (int i = 0; i < NUM_SPRITES; i++) {
 			//translate sprite position to relative to camera
 			float spriteX = sprite[spriteOrder[i]].x - posX;
@@ -397,7 +390,7 @@ int main()
 			// [               ]       =  1/(planeX*dirY-dirX*planeY) *   [                 ]
 			// [ planeY   dirY ]                                          [ -planeY  planeX ]
 
-			float invDet = 1.0 / (planeX * dirY - dirX * planeY); //required for correct matrix multiplication
+			float invDet = 1.0 / (planeX * dirY - dirX * planeY);	// Required for correct matrix multiplication
 
 			float transformX = invDet * (dirY * spriteX - dirX * spriteY);
 			float transformY = invDet * (-planeY * spriteX + planeX * spriteY); //this is actually the depth inside the screen, that what Z is in 3D, the distance of sprite to player, matching sqrt(spriteDistance[i])
