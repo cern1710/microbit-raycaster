@@ -141,7 +141,7 @@ int main()
 		startTime = system_timer_current_time(); // Time at start of the loop
 
 		// Floor casting (horizontal scanline)
-		for (int y = SCREEN_WIDTH / 2 + 1; y < SCREEN_WIDTH; ++y) {
+		for (int y = SCREEN_WIDTH / 2 + 1; y < SCREEN_WIDTH; y++) {
 			// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
 			rayDirX0 = dirX - planeX;
 			rayDirY0 = dirY - planeY;
@@ -180,7 +180,7 @@ int main()
 				// Careful...we've inversed ceiling and floor!!!
 				color = texture[CEILING_TEXTURE][TEX_WIDTH * ty + tx];
 				color = (color >> 1) & 0x7BEF; // make a bit darker
-				uint16_t *p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + y);
+				p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + y);
                 *p = color; // Update the buffer at position (x, y)
 
 				//ceiling (symmetrical, at screenHeight - y - 1 instead of y)
