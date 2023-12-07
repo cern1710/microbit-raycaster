@@ -12,10 +12,10 @@ MicroBit uBit;
 #define LCD_PIN_MISO    14
 #define LCD_PIN_SCLK    13
 
-#define MAP_WIDTH   	24
-#define MAP_HEIGHT  	24
 #define TEX_WIDTH		16
 #define TEX_HEIGHT		16
+#define MAP_WIDTH   	24
+#define MAP_HEIGHT  	24
 #define SCREEN_WIDTH    128
 #define SCREEN_HEIGHT   160
 
@@ -51,6 +51,9 @@ int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 	{4,4,4,4,4,4,4,4,4,4,1,1,1,2,2,2,2,2,2,3,3,3,3,3}
 };
 
+// TODO: create a door animation by adjusting line height for certain walls (based on collision)
+// TODO: create less fucky textures
+// TODO: optimize program (it gets slow when it's close to a wall)
 int main()
 {
 	uBit.init();
@@ -80,8 +83,6 @@ int main()
 	int stepX, stepY;
 	int hit, side;
 	int texX, texY;
-	int w = SCREEN_HEIGHT;
-	int h = SCREEN_WIDTH;
 	int lineHeight;
 	int drawStart, drawEnd;
 	int16_t color = 0;
@@ -138,15 +139,15 @@ int main()
 		startTime = system_timer_current_time(); // Time at start of the loop
 
 		// Floor casting (horizontal scanline)
-		for (int y = h / 2 + 1; y < h; ++y) {
+		for (int y = SCREEN_WIDTH / 2 + 1; y < SCREEN_WIDTH; ++y) {
 			// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
 			rayDirX0 = dirX - planeX;
 			rayDirY0 = dirY - planeY;
 			rayDirX1 = dirX + planeX;
 			rayDirY1 = dirY + planeY;
 
-			int p = y - h / 2; 	  // Current y-coord compared to horizon
-			float posZ = 0.5 * h; // Vertical position of the camera.
+			int p = y - SCREEN_WIDTH / 2; 	 // Current y-coord compared to horizon
+			float posZ = 0.5 * SCREEN_WIDTH; // Vertical position of the camera.
 
 			// Horizontal distance from the camera to the floor for the current row.
 			// 0.5 is the z position exactly in the middle between floor and ceiling.
@@ -154,15 +155,15 @@ int main()
 
 			// calculate the real world step vector we have to add for each x (parallel to camera plane)
 			// adding step by step avoids multiplications with a weight in the inner loop
-			float floorStepX = rowDistance * (rayDirX1 - rayDirX0) / w;
-			float floorStepY = rowDistance * (rayDirY1 - rayDirY0) / w;
+			float floorStepX = rowDistance * (rayDirX1 - rayDirX0) / SCREEN_HEIGHT;
+			float floorStepY = rowDistance * (rayDirY1 - rayDirY0) / SCREEN_HEIGHT;
 
 			// real world coordinates of the leftmost column. This will be updated as we step to the right.
 			float floorX = posX + rowDistance * rayDirX0;
 			float floorY = posY + rowDistance * rayDirY0;
 
 			// Linear interpolation for texture mapping
-			for(int x = 0; x < w; ++x) {
+			for(int x = 0; x < SCREEN_HEIGHT; ++x) {
 				// the cell coord is simply got from the integer parts of floorX and floorY
 				int cellX = (int)(floorX);
 				int cellY = (int)(floorY);
@@ -188,8 +189,8 @@ int main()
 		}
 
 		// Wall casting
-		for (int x = 0; x < w; x++) {
-			cameraX = (2 * x) / (double)w - 1;
+		for (int x = 0; x < SCREEN_HEIGHT; x++) {
+			cameraX = (2 * x) / (double)SCREEN_HEIGHT - 1;
 			rayDirX = dirX + (planeX * cameraX);
 			rayDirY = dirY + (planeY * cameraX);
 
@@ -235,14 +236,14 @@ int main()
 
 			perpWallDist = (side == 0) ? (sideDistX - deltaX) :
 							(sideDistY - deltaY);	// Calculate distance of perpendicular ray
-			lineHeight = (int)(h / perpWallDist);	// Calculate height of line to draw on screen
+			lineHeight = (int)(SCREEN_WIDTH / perpWallDist);	// Calculate height of line to draw on screen
 
 			// Calculate lowest and highest pixel to fill in current stripe
 			pitch = 5;
-			drawStart = -(lineHeight / 2) + (h / 2) + pitch;
-			drawEnd = (lineHeight / 2) + (h / 2) + pitch;
+			drawStart = -(lineHeight / 2) + (SCREEN_WIDTH / 2) + pitch;
+			drawEnd = (lineHeight / 2) + (SCREEN_WIDTH / 2) + pitch;
 			if (drawStart < 0) drawStart = 0;
-			if (drawEnd >= h) drawEnd = h - 1;
+			if (drawEnd >= SCREEN_WIDTH) drawEnd = SCREEN_WIDTH - 1;
 
 			texNum = worldMap[mapX][mapY] - 1;	// Subtract 1 to use texture 0
 
@@ -254,7 +255,7 @@ int main()
 			if(side == 0 && rayDirX > 0) texX = TEX_WIDTH - texX - 1;
 			if(side == 1 && rayDirY < 0) texX = TEX_WIDTH - texX - 1;
 			double step = 1.0 * TEX_HEIGHT / lineHeight;
-			double texPos = (drawStart - pitch - h / 2 + lineHeight / 2) * step;
+			double texPos = (drawStart - pitch - SCREEN_WIDTH / 2 + lineHeight / 2) * step;
 
 			p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH);
 			if (perpWallDist < DISTANCE_THRESHOLD) {
