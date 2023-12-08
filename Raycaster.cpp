@@ -174,6 +174,8 @@ int main()
     float posX = 22, posY = 11.5;      // Initial starting positions
     float dirX = -1, dirY = 0;    	  // Initial direction vector
     float planeX = 0, planeY = 0.66; // 2D Raycaster of camera plane
+
+	// Wall casting
 	float cameraX;	// X-coordinate in camera space
 	float rayDirX, rayDirY;
 	float sideDistX, sideDistY;
@@ -187,10 +189,6 @@ int main()
 	float rayDirX0, rayDirY0, rayDirX1, rayDirY1;
 	float oldDirX, oldPlaneX;
 
-	float invDet;
-	float spriteX, spriteY;
-	float transformX, transformY;
-
 	int mapX, mapY;
 	int stepX, stepY;
 	int hit, side;
@@ -200,6 +198,26 @@ int main()
 	int texNum;
 	int skipStep;
 	int16_t color = 0;
+
+	// Floor casting
+	float floorX, floorY;
+	float floorStepX, floorStepY;
+	float realFloorStepX, realFloorStepY;
+	float rowDistance;
+	int cellX, cellY;
+	int tx, ty;
+
+	// Sprite casting
+	float invDet;
+	float spriteX, spriteY;
+	float transformX, transformY;
+
+	int texY;
+	int drawStartX, drawEndX;
+	int drawStartY, drawEndY;
+	int spriteWidth, spriteHeight;
+	int dist;
+	int spriteScreenX, vMoveScreen;
 
 	// NOTE: color representation is R-B-G!!!
 	// Used for texture mapping
@@ -241,34 +259,16 @@ int main()
 	// texture[10][TEX_WIDTH * 13 + 8] = 1;
 	// texture[10][TEX_WIDTH * 13 + 9] = 1;
 
-	uBit.sleep(200);
-
-	// Floor casting
-	float floorX, floorY;
-	float floorStepX, floorStepY;
-	float realFloorStepX, realFloorStepY;
-	float rowDistance;
-	int cellX, cellY;
-	int tx, ty;
-
-	// Sprite casting
-	int texY;
-	int drawStartX, drawEndX;
-	int drawStartY, drawEndY;
-	int spriteWidth, spriteHeight;
-	int dist;
-	int spriteScreenX, vMoveScreen;
+	uBit.sleep(200);	// Start up
 
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
 
 		// Floor casting (horizontal scanline)
-
-		// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
 		p = (uint16_t *) &img[0];
-		rayDirX0 = dirX - planeX;
+		rayDirX0 = dirX - planeX;	// Ray direction for leftmost ray (x = 0)
 		rayDirY0 = dirY - planeY;
-		rayDirX1 = dirX + planeX;
+		rayDirX1 = dirX + planeX;	// Ray direction for rightmost ray (x = w)
 		rayDirY1 = dirY + planeY;
 		floorStepX = (rayDirX1 - rayDirX0) / SCREEN_HEIGHT;
 		floorStepY = (rayDirY1 - rayDirY0) / SCREEN_HEIGHT;
@@ -374,9 +374,6 @@ int main()
 			step = 1.0 * TEX_HEIGHT / lineHeight;
 			texPos = (drawStart - SCREEN_HALF + lineHeight / 2) * step;
 
-			p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH);
-			tex_ptr = (uint16_t *) &texture[texNum][texX];
-
 			if (perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
 				skipStep = 1;
 			} else { // Render wall with less detail for distant walls
@@ -387,6 +384,7 @@ int main()
 			}
 
 			// Texture rendering
+			tex_ptr = (uint16_t *) &texture[texNum][texX];
 			if (side == 1) {
 				// Cast the texture coordinate to integer, and mask in case of overflow
 				for (int y = drawStart; y < drawEnd; y += skipStep, texPos += skipStep * step) {
@@ -397,17 +395,17 @@ int main()
 					p[y] = tex_ptr[TEX_WIDTH * ((int)texPos & TEX_MASK)];
 			}
 			zBuffer[x] = perpWallDist;	// Update z buffer for current x value on screen
+			p += SCREEN_WIDTH;
 		}
 
 		// Sprite casting
 		p = (uint16_t *) &img[0];
-		for (int i = 0; i < NUM_SPRITES; i++) {
+		invDet = 1.0 / (planeX * dirY - dirX * planeY);	// Required for correct matrix multiplication
+		for (int i = 0; i < NUM_SPRITES; i++)
 			spriteOrder[i] = i;
+		for (int i = 0; i < NUM_SPRITES; i++)
 			spriteDistance[i] = (posX - sprite[i].x) * (posX - sprite[i].x) +
 								(posY - sprite[i].y) * (posY - sprite[i].y); // sqrt not taken, unneeded
-		}
-
-		invDet = 1.0 / (planeX * dirY - dirX * planeY);	// Required for correct matrix multiplication
 		sortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
 
 		// After sorting the sprites, do the projection and draw them
@@ -422,14 +420,15 @@ int main()
 			// [ planeY   dirY ]                [ -planeY  planeX ]
 			transformX = invDet * (dirY * spriteX - dirX * spriteY);
 
-			// This is the depth inside the screen, that what Z is in 3D, the distance of sprite to player, matching sqrt(spriteDistance[i])
+			// This is the depth inside the screen, that what Z is in 3D,
+			// the distance of sprite to player, matching sqrt(spriteDistance[i])
 			transformY = invDet * (-planeY * spriteX + planeX * spriteY);
 
 			spriteScreenX = int((SCREEN_HEIGHT / 2) * (1 + transformX / transformY));
 			vMoveScreen = int(V_MOVE / transformY);
 
 			// Calculate height of the sprite on screen (lowest and highest pixel to fill current stripe)
-			spriteHeight = abs(int(SCREEN_WIDTH / (transformY))) / V_DIV; // "transformY" instead of real distance prevents fisheye
+			spriteHeight = abs(int(SCREEN_WIDTH / (transformY))) / V_DIV; // transformY instead of real distance prevents fisheye
 			drawStartY = max(0, -spriteHeight / 2 + SCREEN_HALF + vMoveScreen);
 			drawEndY = min(SCREEN_WIDTH, spriteHeight / 2 + SCREEN_HALF + vMoveScreen);
 
@@ -441,7 +440,7 @@ int main()
 			// Loop through every vertical stripe of the sprite on screen
 			for (int stripe = drawStartX; stripe < drawEndX; stripe++) {
 				texX = int(32 * (stripe - (-spriteWidth / 2 + spriteScreenX)) * TEX_WIDTH / spriteWidth) / 32;
-				// 1) it's in front of camera plane so you don't see things behind you
+				// 1) It's in front of camera plane so you don't see things behind you
 				// 2) zBuffer, with perpendicular distance
 				if (transformY > 0 && transformY < zBuffer[stripe]) {
 					for (int y = drawStartY; y < drawEndY; y++) {	// For every pixel of the current stripe
@@ -454,7 +453,6 @@ int main()
 				}
 			}
 		}
-
 		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
 		endTime = system_timer_current_time();
 		frameTime = (endTime - startTime) / 1000.0;
@@ -471,17 +469,17 @@ int main()
 		// Both camera direction and camera planes must be rotated
         else if (uBit.buttonA.isPressed()) {
 			oldDirX = dirX;
+			oldPlaneX = planeX;
 			dirX = dirX * cos(rotSpeed) - dirY * sin(rotSpeed);
 			dirY = oldDirX * sin(rotSpeed) + dirY * cos(rotSpeed);
-			oldPlaneX = planeX;
 			planeX = planeX * cos(rotSpeed) - planeY * sin(rotSpeed);
 			planeY = oldPlaneX * sin(rotSpeed) + planeY * cos(rotSpeed);
         }
 		else if (uBit.buttonB.isPressed()) {
 			oldDirX = dirX;
+			oldPlaneX = planeX;
 			dirX = dirX * cos(-rotSpeed) - dirY * sin(-rotSpeed);
 			dirY = oldDirX * sin(-rotSpeed) + dirY * cos(-rotSpeed);
-			oldPlaneX = planeX;
 			planeX = planeX * cos(-rotSpeed) - planeY * sin(-rotSpeed);
 			planeY = oldPlaneX * sin(-rotSpeed) + planeY * cos(-rotSpeed);
 		}
