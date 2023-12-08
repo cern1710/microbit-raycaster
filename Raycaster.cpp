@@ -76,8 +76,8 @@ struct Sprite {
 
 Sprite sprite[NUM_SPRITES] =
 {
-	{20.5, 11.5, 10}, //green light in front of playerstart
-	//green lights in every room
+	{20.5, 11.5, 10}, // Green light in front of playerstart
+	// Green lights in every room
 	{18.5,4.5, 10},
 	{10.0,4.5, 10},
 	{10.0,12.5,10},
@@ -116,7 +116,7 @@ int partition(int* order, float* dist, int left, int right)
     int i = (left - 1);
 
     for (int j = left; j <= right - 1; j++) {
-        if (dist[j] < pivot) {	// Reverse pivot
+        if (dist[j] < pivot) {
             i++;
             swap(dist[i], dist[j]);
             swap(order[i], order[j]);
@@ -243,18 +243,29 @@ int main()
 
 	uBit.sleep(200);
 
+	// Floor casting
 	float floorX, floorY;
 	float floorStepX, floorStepY;
 	float realFloorStepX, realFloorStepY;
 	float rowDistance;
-
 	int cellX, cellY;
 	int tx, ty;
+
+	// Sprite casting
+	int texY;
+	int drawStartX, drawEndX;
+	int drawStartY, drawEndY;
+	int spriteWidth, spriteHeight;
+	int dist;
+	int spriteScreenX, vMoveScreen;
 
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
 
+		// Floor casting (horizontal scanline)
+
 		// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
+		p = (uint16_t *) &img[0];
 		rayDirX0 = dirX - planeX;
 		rayDirY0 = dirY - planeY;
 		rayDirX1 = dirX + planeX;
@@ -262,30 +273,28 @@ int main()
 		floorStepX = (rayDirX1 - rayDirX0) / SCREEN_HEIGHT;
 		floorStepY = (rayDirY1 - rayDirY0) / SCREEN_HEIGHT;
 
-		// Floor casting (horizontal scanline)
 		for (int y = SCREEN_HALF + 1; y < SCREEN_WIDTH; y++) {
 			// Horizontal distance from the camera to the floor for the current row.
 			// 0.5 is the z position exactly in the middle between floor and ceiling.
 			// (Vertical position of camera) / (current y-coord compared to horizon)
 			rowDistance = float(SCREEN_HALF) / (y - SCREEN_HALF);
 
-			// calculate the real world step vector we have to add for each x (parallel to camera plane)
-			// adding step by step avoids multiplications with a weight in the inner loop
+			// Calculate the real world step vector we have to add for each x (parallel to camera plane)
+			// Adding step by step avoids multiplications with a weight in the inner loop
 			realFloorStepX = rowDistance * floorStepX;
 			realFloorStepY = rowDistance * floorStepY;
 
-			// real world coordinates of the leftmost column. This will be updated as we step to the right.
+			// Real world coordinates of the leftmost column. This will be updated as we step to the right.
 			floorX = posX + rowDistance * rayDirX0;
 			floorY = posY + rowDistance * rayDirY0;
 
 			// Linear interpolation for texture mapping
-			p = (uint16_t *) &img[0];
 			for (int x = 0; x < SCREEN_HEIGHT; x++) {
 				// The cell coord is simply got from the integer parts of floorX and floorY
 				cellX = (int)(floorX);
 				cellY = (int)(floorY);
 
-				// get the texture coordinate from the fractional part
+				// Get texture coordinate from the fractional part
 				tx = (int)(TEX_WIDTH * (floorX - cellX)) & (TEX_MASK);
 				ty = (int)(TEX_HEIGHT * (floorY - cellY)) & (TEX_MASK);
 
@@ -391,56 +400,56 @@ int main()
 		}
 
 		// Sprite casting
+		p = (uint16_t *) &img[0];
 		for (int i = 0; i < NUM_SPRITES; i++) {
 			spriteOrder[i] = i;
 			spriteDistance[i] = (posX - sprite[i].x) * (posX - sprite[i].x) +
-								(posY - sprite[i].y) * (posY - sprite[i].y); //sqrt not taken, unneeded
+								(posY - sprite[i].y) * (posY - sprite[i].y); // sqrt not taken, unneeded
 		}
 
 		invDet = 1.0 / (planeX * dirY - dirX * planeY);	// Required for correct matrix multiplication
 		sortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
+
 		// After sorting the sprites, do the projection and draw them
 		for (int i = 0; i < NUM_SPRITES; i++) {
-			//translate sprite position to relative to camera
+			// Translate sprite position to relative to camera
 			spriteX = sprite[spriteOrder[i]].x - posX;
 			spriteY = sprite[spriteOrder[i]].y - posY;
 
-			//transform sprite with the inverse camera matrix
+			// Transform sprite with the inverse camera matrix
 			// [ planeX   dirX ] -1             [ dirY      -dirX ]
 			// [               ]     = invDet * [                 ]
 			// [ planeY   dirY ]                [ -planeY  planeX ]
 			transformX = invDet * (dirY * spriteX - dirX * spriteY);
-			transformY = invDet * (-planeY * spriteX + planeX * spriteY); 	// This is the depth inside the screen, that what Z is in 3D, the distance of sprite to player, matching sqrt(spriteDistance[i])
 
-			int spriteScreenX = int((SCREEN_HEIGHT / 2) * (1 + transformX / transformY));
+			// This is the depth inside the screen, that what Z is in 3D, the distance of sprite to player, matching sqrt(spriteDistance[i])
+			transformY = invDet * (-planeY * spriteX + planeX * spriteY);
 
-			int vMoveScreen = int(V_MOVE / transformY);
+			spriteScreenX = int((SCREEN_HEIGHT / 2) * (1 + transformX / transformY));
+			vMoveScreen = int(V_MOVE / transformY);
 
-			//calculate height of the sprite on screen
-			int spriteHeight = abs(int(SCREEN_WIDTH / (transformY))) / V_DIV; //using "transformY" instead of the real distance prevents fisheye
-			//calculate lowest and highest pixel to fill in current stripe
-			int drawStartY = max(0, -spriteHeight / 2 + SCREEN_WIDTH / 2 + vMoveScreen);
-			int drawEndY = min(SCREEN_WIDTH, spriteHeight / 2 + SCREEN_WIDTH / 2 + vMoveScreen);
+			// Calculate height of the sprite on screen (lowest and highest pixel to fill current stripe)
+			spriteHeight = abs(int(SCREEN_WIDTH / (transformY))) / V_DIV; // "transformY" instead of real distance prevents fisheye
+			drawStartY = max(0, -spriteHeight / 2 + SCREEN_HALF + vMoveScreen);
+			drawEndY = min(SCREEN_WIDTH, spriteHeight / 2 + SCREEN_HALF + vMoveScreen);
 
-			//calculate width of the sprite
-			int spriteWidth = abs(int (SCREEN_WIDTH / (transformY))) / U_DIV; // same as height of sprite, given that it's square
-			int drawStartX = max(0, -spriteWidth / 2 + spriteScreenX);
-			int drawEndX = min(SCREEN_HEIGHT, spriteWidth / 2 + spriteScreenX);
+			// Calculate width of the sprite
+			spriteWidth = abs(int(SCREEN_WIDTH / (transformY))) / U_DIV;
+			drawStartX = max(0, -spriteWidth / 2 + spriteScreenX);
+			drawEndX = min(SCREEN_HEIGHT, spriteWidth / 2 + spriteScreenX);
 
-			//loop through every vertical stripe of the sprite on screen
+			// Loop through every vertical stripe of the sprite on screen
 			for (int stripe = drawStartX; stripe < drawEndX; stripe++) {
-				int texX = int(32 * (stripe - (-spriteWidth / 2 + spriteScreenX)) * TEX_WIDTH / spriteWidth) / 32;
-				//the conditions in the if are:
-				//1) it's in front of camera plane so you don't see things behind you
-				//2) ZBuffer, with perpendicular distance
+				texX = int(32 * (stripe - (-spriteWidth / 2 + spriteScreenX)) * TEX_WIDTH / spriteWidth) / 32;
+				// 1) it's in front of camera plane so you don't see things behind you
+				// 2) zBuffer, with perpendicular distance
 				if (transformY > 0 && transformY < zBuffer[stripe]) {
-					for (int y = drawStartY; y < drawEndY; y++) {	//for every pixel of the current stripe
-						int d = (y - vMoveScreen) * 32 - SCREEN_WIDTH * 16 + spriteHeight * 16; //256 and 128 factors to avoid floats
-						int texY = ((d * TEX_HEIGHT) / spriteHeight) / 32;
-						uint16_t color = texture[sprite[spriteOrder[i]].texture][TEX_WIDTH * texY + texX]; //get current color from the texture
-						p = (uint16_t *) &img[0] + (stripe * SCREEN_WIDTH + y);
-						if ((color & 0x00FFFFFF) != 0)
-							*p = color; //paint pixel if it isn't black, black is the invisible color
+					for (int y = drawStartY; y < drawEndY; y++) {	// For every pixel of the current stripe
+						dist = (y - vMoveScreen) * 32 + (spriteHeight - SCREEN_WIDTH) * 16; // Avoid floating point w/ 32 and 16
+						texY = ((dist * TEX_HEIGHT) / spriteHeight) / 32;
+						color = texture[sprite[spriteOrder[i]].texture][TEX_WIDTH * texY + texX]; // Get current color from the texture
+						if ((color & 0xFFFF) != 0)
+							p[stripe * SCREEN_WIDTH + y] = color; // Black is the invisible color
 					}
 				}
 			}
@@ -459,6 +468,7 @@ int main()
 			if (worldMap[int(posX)][int(posY + dirY * moveSpeed)] == false)
 				posY += dirY * moveSpeed;
 		}
+		// Both camera direction and camera planes must be rotated
         else if (uBit.buttonA.isPressed()) {
 			oldDirX = dirX;
 			dirX = dirX * cos(rotSpeed) - dirY * sin(rotSpeed);
@@ -468,7 +478,6 @@ int main()
 			planeY = oldPlaneX * sin(rotSpeed) + planeY * cos(rotSpeed);
         }
 		else if (uBit.buttonB.isPressed()) {
-			//both camera direction and camera plane must be rotated
 			oldDirX = dirX;
 			dirX = dirX * cos(-rotSpeed) - dirY * sin(-rotSpeed);
 			dirY = oldDirX * sin(-rotSpeed) + dirY * cos(-rotSpeed);
