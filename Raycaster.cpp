@@ -36,6 +36,8 @@ MicroBit uBit;
 
 #define COLOR_MASK	0xEFBB
 
+#define MAX_FLOAT	3.402823e+38
+
 int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 {
   {8,8,8,8,8,8,8,8,8,8,8,4,4,6,4,4,6,4,6,4,4,4,6,4},
@@ -243,79 +245,77 @@ int main()
 
 	uBit.sleep(200);
 
-	int p_y, posZ;
 	int cellX, cellY;
 	int tx, ty;
 
 	float rowDistance;
 	float floorStepX, floorStepY;
+	float realFloorStepX, realFloorStepY;
 	float floorX, floorY;
 
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
 
 		// Floor casting (horizontal scanline)
+
+		rayDirX0 = dirX - planeX;	// Leftmost ray (x = 0)
+		rayDirY0 = dirY - planeY;
+		rayDirX1 = dirX + planeX;	// Rightmost ray (x = w)
+		rayDirY1 = dirY + planeY;
+		floorStepX = (rayDirX1 - rayDirX0) / SCREEN_HEIGHT;
+		floorStepY = (rayDirY1 - rayDirY0) / SCREEN_HEIGHT;
+
 		for (int y = SCREEN_HALF + 1; y < SCREEN_WIDTH; y++) {
-			// rayDir for leftmost ray (x = 0) and rightmost ray (x = w)
-			rayDirX0 = dirX - planeX;
-			rayDirY0 = dirY - planeY;
-			rayDirX1 = dirX + planeX;
-			rayDirY1 = dirY + planeY;
-
-			p_y = y - SCREEN_HALF;  // Current y-coord compared to horizon
-			posZ = SCREEN_HALF; 	// Vertical position of the camera.
-
 			// Horizontal distance from the camera to the floor for the current row.
 			// 0.5 is the z position exactly in the middle between floor and ceiling.
-			rowDistance = posZ / p_y;
+			rowDistance = SCREEN_HALF / (y - SCREEN_HALF);	// Denom: current y-coord compared to horizon
 
-			// calculate the real world step vector we have to add for each x (parallel to camera plane)
+			// Calculate the real world step vector we have to add for each x (parallel to camera plane)
 			// adding step by step avoids multiplications with a weight in the inner loop
-			floorStepX = rowDistance * (rayDirX1 - rayDirX0) / SCREEN_HEIGHT;
-			floorStepY = rowDistance * (rayDirY1 - rayDirY0) / SCREEN_HEIGHT;
+			realFloorStepX = rowDistance * floorStepX;
+			realFloorStepY = rowDistance * floorStepY;
 
-			// real world coordinates of the leftmost column. This will be updated as we step to the right.
+			// Real world coordinates of the leftmost column. This will be updated as we step to the right.
 			floorX = posX + rowDistance * rayDirX0;
 			floorY = posY + rowDistance * rayDirY0;
 
 			// Linear interpolation for texture mapping
-			p = (uint16_t *) &img[0] + y;
+			p = (uint16_t *) &img[0];
 			for (int x = 0; x < SCREEN_HEIGHT; x++) {
-				// the cell coord is simply got from the integer parts of floorX and floorY
+				// Cell coord is simply got from the integer parts of floorX and floorY
 				cellX = (int)(floorX);
 				cellY = (int)(floorY);
 
-				// get the texture coordinate from the fractional part
+				// Get the texture coordinate from the fractional part
 				tx = (int)(TEX_WIDTH * (floorX - cellX)) & (TEX_WIDTH - 1);
 				ty = (int)(TEX_HEIGHT * (floorY - cellY)) & (TEX_HEIGHT - 1);
 
-				floorX += floorStepX;
-				floorY += floorStepY;
+				floorX += realFloorStepX;
+				floorY += realFloorStepY;
 
 				// We've inversed ceiling and floor!!!
 				color = texture[CEILING_TEXTURE][TEX_WIDTH * ty + tx];
-				p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + y);
-                *p = color; // make a bit darker
+            	p[x * SCREEN_WIDTH + y] = color; // make a bit darker
 
 				// Floor (symmetrical, at screenHeight - y - 1 instead of y)
 				color = texture[FLOOR_TEXTURE][TEX_WIDTH * ty + tx];
-				p = (uint16_t *) &img[0] + (x * SCREEN_WIDTH + SCREEN_WIDTH - y - 1);
-                *p = (color >> 1) & 0x7BEF; // make a bit darker
+                p[(x + 1) * SCREEN_WIDTH - (y + 1)] = (color >> 1) & 0x7BEF; // Make a bit darker
 			}
 		}
 
 		// Wall casting
+
+		mapX = int(posX);
+		mapY = int(posY);
+
 		for (int x = 0; x < SCREEN_HEIGHT; x++) {
 			cameraX = (2 * x) / (float)SCREEN_HEIGHT - 1;
 			rayDirX = dirX + (planeX * cameraX);
 			rayDirY = dirY + (planeY * cameraX);
 
-			mapX = int(posX);
-			mapY = int(posY);
-
 			// Length of ray from current position to next x or y-side
-			deltaX = (rayDirX == 0) ? 1e30 : abs(1 / rayDirX);
-			deltaY = (rayDirY == 0) ? 1e30 : abs(1 / rayDirY);
+			deltaX = (rayDirX == 0) ? MAX_FLOAT : abs(1 / rayDirX);
+			deltaY = (rayDirY == 0) ? MAX_FLOAT : abs(1 / rayDirY);
 
 			if (rayDirX < 0) {
 				stepX = -1;
@@ -406,7 +406,7 @@ int main()
 			spriteX = sprite[spriteOrder[i]].x - posX;
 			spriteY = sprite[spriteOrder[i]].y - posY;
 
-			//transform sprite with the inverse camera matrix
+			// Transform sprite with the inverse camera matrix
 			// [ planeX   dirX ] -1             [ dirY      -dirX ]
 			// [               ]     = invDet * [                 ]
 			// [ planeY   dirY ]                [ -planeY  planeX ]
