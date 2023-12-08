@@ -446,9 +446,9 @@ int main()
 			// Loop through every vertical stripe of the sprite on screen (x)
 			tex_ptr = (uint16_t *) texture[currentSprite.texture];
 			for (x = drawStartX; x < drawEndX; x++) {
-				texX = int((x + (spriteWidth / 2- spriteScreenX)) * TEX_WIDTH / spriteWidth);
+				texX = int((x + (spriteWidth / 2 - spriteScreenX)) * TEX_WIDTH / spriteWidth);
 				// 1) It's in front of camera plane so you don't see things behind you
-				// 2) zBuffer, with perpendicular distance
+				// 2) ZBuffer, with perpendicular distance
 				if (transformY > 0 && transformY < zBuffer[x]) {
 					// Original:
 					// dist = (y - vMoveScreen) * 32 + (spriteHeight - SCREEN_WIDTH) * 16;
