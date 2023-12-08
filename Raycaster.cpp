@@ -359,20 +359,23 @@ int main()
 					mapY += stepY;
 					side = 1;
 				}
-				if (worldMap[mapX][mapY] > 0) hit = 1;
+				if (worldMap[mapX][mapY] > 0)
+					hit = 1;
 			}
 
-			perpWallDist = (side == 0) ? (sideDistX - deltaX) : (sideDistY - deltaY); // Calculate distance of perpendicular ray
-			lineHeight = (int)(SCREEN_WIDTH / perpWallDist);	// Calculate height of line to draw on screen
+			if (side == 0) {
+				perpWallDist = sideDistX - deltaX;	// Calculate distance of perpendicular ray
+				wallX = posY + perpWallDist * rayDirY;
+			} else {
+				perpWallDist = sideDistY - deltaY;
+				wallX = posX + perpWallDist * rayDirX;
+			}
+			lineHeight = (int)(SCREEN_WIDTH / perpWallDist); // Calculate height of line to draw on screen
+			wallX -= floor(wallX); // Where is the wall hit
 
 			// Calculate lowest and highest pixel to fill in current stripe
 			drawStart = max(0, SCREEN_HALF - (lineHeight / 2));
-			drawEnd   = min(SCREEN_WIDTH, SCREEN_HALF + (lineHeight / 2));
-
-			texNum = worldMap[mapX][mapY] - 1;	// Subtract 1 to use texture 0
-
-			wallX = (side == 0) ? posY + perpWallDist * rayDirY : posX + perpWallDist * rayDirX;
-			wallX -= floor(wallX); // Where is the wall hit
+			drawEnd = min(SCREEN_WIDTH, SCREEN_HALF + (lineHeight / 2));
 
 			texX = int(wallX * float(TEX_WIDTH));	// X-coordinate of texture
 			if ((side == 0 && rayDirX > 0) || (side == 1 && rayDirY < 0))
@@ -392,6 +395,7 @@ int main()
 
 			// Texture rendering
 			// Cast the texture coordinate to integer, and mask in case of overflow
+			texNum = worldMap[mapX][mapY] - 1;	// Subtract 1 to use texture 0
 			tex_ptr = (uint16_t *) &texture[texNum][texX];
 			if (side == 1) {
 				for (y = drawStart; y < drawEnd; y += skipStep, texPos += skipStep * step)
