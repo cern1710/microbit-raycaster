@@ -36,6 +36,8 @@ MicroBit uBit;
 
 #define COLOR_MASK	0xEFBB
 
+#define MAX_FLOAT	1e30f
+
 int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 {
   {8,8,8,8,8,8,8,8,8,8,8,4,4,6,4,4,6,4,6,4,4,4,6,4},
@@ -136,7 +138,7 @@ void quickSort(int* order, float* dist, int left, int right)
     }
 }
 
-// Sort the sprites based on distance
+/* Sort the sprites based on distance */
 void sortSprites(int* order, float* dist, int amount)
 {
     float *sortedDist = new float[amount];
@@ -218,14 +220,12 @@ int main()
 	int drawStartY, drawEndY;
 	int spriteWidth, spriteHeight;
 	int spriteScreenX, vMoveScreen;
-
 	bool moved = true;
 
 	// Texture mapping
 	int xorcolor, xcolor, ycolor, xycolor;
 
 	int x, y, i;
-
 	// NOTE: color representation is R-B-G!!!
 	// Used for texture mapping
 	uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
@@ -266,7 +266,7 @@ int main()
 	// texture[10][TEX_WIDTH * 13 + 8] = 1;
 	// texture[10][TEX_WIDTH * 13 + 9] = 1;
 
-	uBit.sleep(200);	// Start up
+	uBit.sleep(200); // Start up
 
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
@@ -328,8 +328,8 @@ int main()
 			mapY = int(posY);
 
 			// Length of ray from current position to next x or y-side
-			deltaX = (rayDirX == 0) ? 1e30 : abs(1 / rayDirX);
-			deltaY = (rayDirY == 0) ? 1e30 : abs(1 / rayDirY);
+			deltaX = (rayDirX == 0) ? MAX_FLOAT : abs(1 / rayDirX);
+			deltaY = (rayDirY == 0) ? MAX_FLOAT : abs(1 / rayDirY);
 
 			if (rayDirX < 0) {
 				stepX = -1;
@@ -455,7 +455,7 @@ int main()
 					// texY = (dist * TEX_HEIGHT) / (32 * spriteHeight);
 					// New version optimises this based on the assumption that TEX_WIDTH=TEX_HEIGHT=16
 					for (y = drawStartY; y < drawEndY; y++) {	// For every pixel of the current stripe
-						texY = int((y - vMoveScreen) * 16 + (spriteHeight - SCREEN_WIDTH) * 8) / spriteHeight; // Avoid floating point
+						texY = int(8 * ((y - vMoveScreen) * 2 + spriteHeight - SCREEN_WIDTH)) / spriteHeight; // Avoid floating point
 						color = tex_ptr[TEX_WIDTH * texY + texX]; // Get current color from the texture
 						if ((color & 0xFFFF) != 0)
 							img_ptr[x * SCREEN_WIDTH + y] = color; // Black is the invisible color
