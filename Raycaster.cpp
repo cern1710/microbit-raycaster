@@ -152,6 +152,29 @@ void sortSprites(int* order, float* dist, int amount)
     }
 }
 
+struct Player {
+	float posX;
+	float posY;
+	float dirX;
+	float dirY;
+	float planeX;
+	float planeY;
+};
+
+struct FloorContext {
+	float floorX;
+	float floorY;
+	float floorStepX;
+	float floorStepY;
+	float realFloorStepX;
+	float realFloorStepY;
+	float rowDistance;
+	int cellX;
+	int cellY;
+	int tx;
+	int ty;
+};
+
 int main()
 {
 	uBit.init();
@@ -164,9 +187,16 @@ int main()
 	uint64_t startTime, endTime;
 	uint16_t *img_ptr, *tex_ptr;
 
-    float posX = 22, posY = 11.5;    // Initial starting positions
-    float dirX = -1, dirY = 0;    	 // Initial direction vector
-    float planeX = 0, planeY = 0.66; // 2D Raycaster of camera plane
+	Player *p = new Player;
+	// Initial starting positions
+	p->posX = 22;
+	p->posY = 11.5;
+	// Initial direction vector
+	p->dirX = -1;
+	p->dirY = 0;
+	// 2D raycaster of camera plane
+	p->planeX = 0;
+	p->planeY = 0.66;
 
 	// Wall casting
 	float cameraX;	// X-coordinate in camera space
@@ -192,14 +222,7 @@ int main()
 	int skipStep;
 	int16_t color = 0;
 
-	// Floor casting
-	float floorX, floorY;
-	float floorStepX, floorStepY;
-	float realFloorStepX, realFloorStepY;
-	float rowDistance;
-
-	int cellX, cellY;
-	int tx, ty;
+	FloorContext *f = new FloorContext;
 
 	// Sprite casting
 	Sprite currentSprite;
@@ -265,47 +288,47 @@ int main()
 
 		// Floor casting (horizontal scanline)
 		img_ptr = (uint16_t *) &img[0];
-		rayDirX0 = dirX - planeX;	// Ray direction for leftmost ray (x = 0)
-		rayDirY0 = dirY - planeY;
-		rayDirX1 = dirX + planeX;	// Ray direction for rightmost ray (x = w)
-		rayDirY1 = dirY + planeY;
-		floorStepX = (rayDirX1 - rayDirX0) / SCREEN_HEIGHT;
-		floorStepY = (rayDirY1 - rayDirY0) / SCREEN_HEIGHT;
+		rayDirX0 = p->dirX - p->planeX;	// Ray direction for leftmost ray (x = 0)
+		rayDirY0 = p->dirY - p->planeY;
+		rayDirX1 = p->dirX + p->planeX;	// Ray direction for rightmost ray (x = w)
+		rayDirY1 = p->dirY + p->planeY;
+		f->floorStepX = (rayDirX1 - rayDirX0) / SCREEN_HEIGHT;
+		f->floorStepY = (rayDirY1 - rayDirY0) / SCREEN_HEIGHT;
 
 		for (y = SCREEN_HALF + 1; y < SCREEN_WIDTH; y++) {
 			// Horizontal distance from the camera to the floor for the current row.
 			// 0.5 is the z position exactly in the middle between floor and ceiling.
 			// (Vertical position of camera) / (current y-coord compared to horizon)
-			rowDistance = float(SCREEN_HALF) / (y - SCREEN_HALF);
+			f->rowDistance = float(SCREEN_HALF) / (y - SCREEN_HALF);
 
 			// Calculate the real world step vector we have to add for each x (parallel to camera plane)
 			// Adding step by step avoids multiplications with a weight in the inner loop
-			realFloorStepX = rowDistance * floorStepX;
-			realFloorStepY = rowDistance * floorStepY;
+			f->realFloorStepX = f->rowDistance * f->floorStepX;
+			f->realFloorStepY = f->rowDistance * f->floorStepY;
 
 			// Real world coordinates of the leftmost column. This will be updated as we step to the right.
-			floorX = posX + rowDistance * rayDirX0;
-			floorY = posY + rowDistance * rayDirY0;
+			f->floorX = p->posX + f->rowDistance * rayDirX0;
+			f->floorY = p->posY + f->rowDistance * rayDirY0;
 
 			// Linear interpolation for texture mapping
 			for (x = 0; x < SCREEN_HEIGHT; x++) {
 				// The cell coord is simply got from the integer parts of floorX and floorY
-				cellX = (int)(floorX);
-				cellY = (int)(floorY);
+				f->cellX = (int)(f->floorX);
+				f->cellY = (int)(f->floorY);
 
 				// Get texture coordinate from the fractional part
-				tx = (int)(TEX_WIDTH * (floorX - cellX)) & TEX_MASK;
-				ty = (int)(TEX_HEIGHT * (floorY - cellY)) & TEX_MASK;
+				f->tx = (int)(TEX_WIDTH * (f->floorX - f->cellX)) & TEX_MASK;
+				f->ty = (int)(TEX_HEIGHT * (f->floorY - f->cellY)) & TEX_MASK;
 
-				floorX += realFloorStepX;
-				floorY += realFloorStepY;
+				f->floorX += f->realFloorStepX;
+				f->floorY += f->realFloorStepY;
 
 				// Inverse ceiling and floor
-				color = texture[CEILING_TEXTURE][TEX_WIDTH * ty + tx];
+				color = texture[CEILING_TEXTURE][TEX_WIDTH * f->ty + f->tx];
                 img_ptr[x * SCREEN_WIDTH + y] = color; // Make a bit darker
 
 				// Floor (symmetrical, at screenHeight - y - 1 instead of y)
-				color = texture[FLOOR_TEXTURE][TEX_WIDTH * ty + tx];
+				color = texture[FLOOR_TEXTURE][TEX_WIDTH * f->ty + f->tx];
                 img_ptr[(x + 1) * SCREEN_WIDTH - (y + 1)] = (color >> 1) & 0x7BEF;
 			}
 		}
@@ -313,11 +336,11 @@ int main()
 		// Wall casting
 		for (x = 0; x < SCREEN_HEIGHT; x++) {
 			cameraX = (2 * x / (float)SCREEN_HEIGHT) - 1;
-			rayDirX = dirX + (planeX * cameraX);
-			rayDirY = dirY + (planeY * cameraX);
+			rayDirX = p->dirX + (p->planeX * cameraX);
+			rayDirY = p->dirY + (p->planeY * cameraX);
 
-			mapX = int(posX);
-			mapY = int(posY);
+			mapX = int(p->posX);
+			mapY = int(p->posY);
 
 			// Length of ray from current position to next x or y-side
 			deltaX = (rayDirX == 0) ? MAX_FLOAT : abs(1 / rayDirX);
@@ -325,17 +348,17 @@ int main()
 
 			if (rayDirX < 0) {
 				stepX = -1;
-				sideDistX = (posX - mapX) * deltaX;
+				sideDistX = (p->posX - mapX) * deltaX;
 			} else {
 				stepX = 1;
-				sideDistX = (mapX + 1.0 - posX) * deltaX;
+				sideDistX = (mapX + 1.0 - p->posX) * deltaX;
 			}
 			if (rayDirY < 0) {
 				stepY = -1;
-				sideDistY = (posY - mapY) * deltaY;
+				sideDistY = (p->posY - mapY) * deltaY;
 			} else {
 				stepY = 1;
-				sideDistY = (mapY + 1.0 - posY) * deltaY;
+				sideDistY = (mapY + 1.0 - p->posY) * deltaY;
 			}
 
 			// Digital differential analyzer (DDA) algorithm
@@ -357,10 +380,10 @@ int main()
 
 			if (side == 0) {
 				perpWallDist = sideDistX - deltaX;	// Calculate distance of perpendicular ray
-				wallX = posY + perpWallDist * rayDirY;
+				wallX = p->posY + perpWallDist * rayDirY;
 			} else {
 				perpWallDist = sideDistY - deltaY;
-				wallX = posX + perpWallDist * rayDirX;
+				wallX = p->posX + perpWallDist * rayDirX;
 			}
 			lineHeight = (int)(SCREEN_WIDTH / perpWallDist); // Calculate height of line to draw on screen
 			wallX -= floor(wallX); // Where is the wall hit
@@ -402,13 +425,13 @@ int main()
 
 		// Sprite casting
 		img_ptr = (uint16_t *) &img[0];
-		invDet = 1.0 / (planeX * dirY - dirX * planeY);	// Required for matmul
+		invDet = 1.0 / (p->planeX * p->dirY - p->dirX * p->planeY);	// Required for matmul
 		if (moved) {	// Only sort the arrays if we move
 			// We don't need to take the Euclidean distance of sprites
 			for (i = 0; i < NUM_SPRITES; i++) {
 				spriteOrder[i] = i;
-				spriteDistance[i] = (posX - sprite[i].x) * (posX - sprite[i].x) +
-									(posY - sprite[i].y) * (posY - sprite[i].y);
+				spriteDistance[i] = (p->posX - sprite[i].x) * (p->posX - sprite[i].x) +
+									(p->posY - sprite[i].y) * (p->posY - sprite[i].y);
 			}
 			sortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
 		}
@@ -417,17 +440,17 @@ int main()
 		for (i = 0; i < NUM_SPRITES; i++) {
 			// Translate sprite position to relative to camera
 			currentSprite = sprite[spriteOrder[i]];
-			spriteX = currentSprite.x - posX;
-			spriteY = currentSprite.y - posY;
+			spriteX = currentSprite.x - p->posX;
+			spriteY = currentSprite.y - p->posY;
 
 			// This is the depth inside the screen, that what Z is in 3D,
 			// the distance of sprite to player, matching sqrt(spriteDistance[i])
-			transformY = invDet * (-planeY * spriteX + planeX * spriteY);
+			transformY = invDet * (-p->planeY * spriteX + p->planeX * spriteY);
 			if (transformY <= 0)  // Skip this sprite if it's behind player
 				continue;
 
 			// Transform sprite with the inverse camera matrix
-			transformX = invDet * (dirY * spriteX - dirX * spriteY);
+			transformX = invDet * (p->dirY * spriteX - p->dirX * spriteY);
 			spriteScreenX = int((SCREEN_HEIGHT / 2) * (1 + transformX / transformY));
 
 			vMoveScreen = int(V_MOVE / transformY);
@@ -473,28 +496,28 @@ int main()
 		moved = false;
 
 		if (uBit.buttonAB.isPressed()) {	// Move forward
-			if (worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false)
-				posX += dirX * moveSpeed;
-			if (worldMap[int(posX)][int(posY + dirY * moveSpeed)] == false)
-				posY += dirY * moveSpeed;
+			if (worldMap[int(p->posX + p->dirX * moveSpeed)][int(p->posY)] == false)
+				p->posX += p->dirX * moveSpeed;
+			if (worldMap[int(p->posX)][int(p->posY + p->dirY * moveSpeed)] == false)
+				p->posY += p->dirY * moveSpeed;
 			moved = true;
 		}
 		// Both camera direction and camera planes must be rotated
         else if (uBit.buttonA.isPressed()) {	// Turn left
-			oldDirX = dirX;
-			oldPlaneX = planeX;
-			dirX = dirX * cos(rotSpeed) - dirY * sin(rotSpeed);
-			dirY = oldDirX * sin(rotSpeed) + dirY * cos(rotSpeed);
-			planeX = planeX * cos(rotSpeed) - planeY * sin(rotSpeed);
-			planeY = oldPlaneX * sin(rotSpeed) + planeY * cos(rotSpeed);
+			oldDirX = p->dirX;
+			oldPlaneX = p->planeX;
+			p->dirX = p->dirX * cos(rotSpeed) - p->dirY * sin(rotSpeed);
+			p->dirY = oldDirX * sin(rotSpeed) + p->dirY * cos(rotSpeed);
+			p->planeX = p->planeX * cos(rotSpeed) - p->planeY * sin(rotSpeed);
+			p->planeY = oldPlaneX * sin(rotSpeed) + p->planeY * cos(rotSpeed);
         }
 		else if (uBit.buttonB.isPressed()) {	// Turn right
-			oldDirX = dirX;
-			oldPlaneX = planeX;
-			dirX = dirX * cos(-rotSpeed) - dirY * sin(-rotSpeed);
-			dirY = oldDirX * sin(-rotSpeed) + dirY * cos(-rotSpeed);
-			planeX = planeX * cos(-rotSpeed) - planeY * sin(-rotSpeed);
-			planeY = oldPlaneX * sin(-rotSpeed) + planeY * cos(-rotSpeed);
+			oldDirX = p->dirX;
+			oldPlaneX = p->planeX;
+			p->dirX = p->dirX * cos(-rotSpeed) - p->dirY * sin(-rotSpeed);
+			p->dirY = oldDirX * sin(-rotSpeed) + p->dirY * cos(-rotSpeed);
+			p->planeX = p->planeX * cos(-rotSpeed) - p->planeY * sin(-rotSpeed);
+			p->planeY = oldPlaneX * sin(-rotSpeed) + p->planeY * cos(-rotSpeed);
 		}
 	}
 }
