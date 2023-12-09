@@ -69,6 +69,7 @@ int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 float zBuffer[SCREEN_HEIGHT];
 int spriteOrder[NUM_SPRITES];
 float spriteDistance[NUM_SPRITES];
+uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
 
 struct Sprite {
 	float x;
@@ -169,11 +170,79 @@ struct FloorContext {
 	float realFloorStepX;
 	float realFloorStepY;
 	float rowDistance;
+	float rayDirX0;
+	float rayDirX1;
+	float rayDirY0;
+	float rayDirY1;
 	int cellX;
 	int cellY;
 	int tx;
 	int ty;
 };
+
+struct WallContext {
+
+};
+
+struct SpriteContext {
+
+};
+
+void linearInterpolation(uint16_t *img_ptr, FloorContext *f, int current_y)
+{
+	int16_t color;
+
+	for (int x = 0; x < SCREEN_HEIGHT; x++) {
+		// The cell coord is simply got from the integer parts of floorX and floorY
+		f->cellX = (int)(f->floorX);
+		f->cellY = (int)(f->floorY);
+
+		// Get texture coordinate from the fractional part
+		f->tx = (int)(TEX_WIDTH * (f->floorX - f->cellX)) & TEX_MASK;
+		f->ty = (int)(TEX_HEIGHT * (f->floorY - f->cellY)) & TEX_MASK;
+
+		f->floorX += f->realFloorStepX;
+		f->floorY += f->realFloorStepY;
+
+		// Inverse ceiling and floor
+		color = texture[CEILING_TEXTURE][TEX_WIDTH * f->ty + f->tx];
+		img_ptr[x * SCREEN_WIDTH + current_y] = color; // Make a bit darker
+
+		// Floor (symmetrical, at screenHeight - y - 1 instead of y)
+		color = texture[FLOOR_TEXTURE][TEX_WIDTH * f->ty + f->tx];
+		img_ptr[(x + 1) * SCREEN_WIDTH - (current_y + 1)] = (color >> 1) & 0x7BEF;
+	}
+}
+
+/* Horizontal scanline */
+void floorCasting(uint16_t *img_ptr, FloorContext *f, Player *p)
+{
+	f->rayDirX0 = p->dirX - p->planeX;	// Ray direction for leftmost ray (x = 0)
+	f->rayDirY0 = p->dirY - p->planeY;
+	f->rayDirX1 = p->dirX + p->planeX;	// Ray direction for rightmost ray (x = w)
+	f->rayDirY1 = p->dirY + p->planeY;
+	f->floorStepX = (f->rayDirX1 - f->rayDirX0) / SCREEN_HEIGHT;
+	f->floorStepY = (f->rayDirY1 - f->rayDirY0) / SCREEN_HEIGHT;
+
+	for (int y = SCREEN_HALF + 1; y < SCREEN_WIDTH; y++) {
+		// Horizontal distance from the camera to the floor for the current row.
+		// 0.5 is the z position exactly in the middle between floor and ceiling.
+		// (Vertical position of camera) / (current y-coord compared to horizon)
+		f->rowDistance = float(SCREEN_HALF) / (y - SCREEN_HALF);
+
+		// Calculate the real world step vector we have to add for each x (parallel to camera plane)
+		// Adding step by step avoids multiplications with a weight in the inner loop
+		f->realFloorStepX = f->rowDistance * f->floorStepX;
+		f->realFloorStepY = f->rowDistance * f->floorStepY;
+
+		// Real world coordinates of the leftmost column. This will be updated as we step to the right.
+		f->floorX = p->posX + f->rowDistance * f->rayDirX0;
+		f->floorY = p->posY + f->rowDistance * f->rayDirY0;
+
+		// Linear interpolation for texture mapping
+		linearInterpolation(img_ptr, f, y);
+	}
+}
 
 int main()
 {
@@ -209,7 +278,6 @@ int main()
 	float wallX;
 	float step;
 	float texPos;
-	float rayDirX0, rayDirY0, rayDirX1, rayDirY1;
 	float oldDirX, oldPlaneX;
 
 	int mapX, mapY;
@@ -243,7 +311,6 @@ int main()
 	int x, y, i;
 	// NOTE: color representation is R-B-G!!!
 	// Used for texture mapping
-	uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
 	for (x = 0; x < TEX_WIDTH; x++) {
 		for (y = 0; y < TEX_HEIGHT; y++) {
 			xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
@@ -288,50 +355,7 @@ int main()
 
 		// Floor casting (horizontal scanline)
 		img_ptr = (uint16_t *) &img[0];
-		rayDirX0 = p->dirX - p->planeX;	// Ray direction for leftmost ray (x = 0)
-		rayDirY0 = p->dirY - p->planeY;
-		rayDirX1 = p->dirX + p->planeX;	// Ray direction for rightmost ray (x = w)
-		rayDirY1 = p->dirY + p->planeY;
-		f->floorStepX = (rayDirX1 - rayDirX0) / SCREEN_HEIGHT;
-		f->floorStepY = (rayDirY1 - rayDirY0) / SCREEN_HEIGHT;
-
-		for (y = SCREEN_HALF + 1; y < SCREEN_WIDTH; y++) {
-			// Horizontal distance from the camera to the floor for the current row.
-			// 0.5 is the z position exactly in the middle between floor and ceiling.
-			// (Vertical position of camera) / (current y-coord compared to horizon)
-			f->rowDistance = float(SCREEN_HALF) / (y - SCREEN_HALF);
-
-			// Calculate the real world step vector we have to add for each x (parallel to camera plane)
-			// Adding step by step avoids multiplications with a weight in the inner loop
-			f->realFloorStepX = f->rowDistance * f->floorStepX;
-			f->realFloorStepY = f->rowDistance * f->floorStepY;
-
-			// Real world coordinates of the leftmost column. This will be updated as we step to the right.
-			f->floorX = p->posX + f->rowDistance * rayDirX0;
-			f->floorY = p->posY + f->rowDistance * rayDirY0;
-
-			// Linear interpolation for texture mapping
-			for (x = 0; x < SCREEN_HEIGHT; x++) {
-				// The cell coord is simply got from the integer parts of floorX and floorY
-				f->cellX = (int)(f->floorX);
-				f->cellY = (int)(f->floorY);
-
-				// Get texture coordinate from the fractional part
-				f->tx = (int)(TEX_WIDTH * (f->floorX - f->cellX)) & TEX_MASK;
-				f->ty = (int)(TEX_HEIGHT * (f->floorY - f->cellY)) & TEX_MASK;
-
-				f->floorX += f->realFloorStepX;
-				f->floorY += f->realFloorStepY;
-
-				// Inverse ceiling and floor
-				color = texture[CEILING_TEXTURE][TEX_WIDTH * f->ty + f->tx];
-                img_ptr[x * SCREEN_WIDTH + y] = color; // Make a bit darker
-
-				// Floor (symmetrical, at screenHeight - y - 1 instead of y)
-				color = texture[FLOOR_TEXTURE][TEX_WIDTH * f->ty + f->tx];
-                img_ptr[(x + 1) * SCREEN_WIDTH - (y + 1)] = (color >> 1) & 0x7BEF;
-			}
-		}
+		floorCasting(img_ptr, f, p);
 
 		// Wall casting
 		for (x = 0; x < SCREEN_HEIGHT; x++) {
