@@ -115,7 +115,7 @@ void swap(T& a, T& b)
 int partition(int* order, float* dist, int left, int right)
 {
     float pivot = dist[right];
-    int i = (left - 1);
+    int i = left - 1;
 
     for (int j = left; j <= right - 1; j++) {
         if (dist[j] < pivot) {
@@ -141,23 +141,15 @@ void quickSort(int* order, float* dist, int left, int right)
 /* Sort the sprites based on distance */
 void sortSprites(int* order, float* dist, int amount)
 {
-    float *sortedDist = new float[amount];
-    int *sortedOrder = new int[amount];
+	int start = 0, end = amount - 1;
 
-    for (int i = 0; i < amount; i++) {
-        sortedDist[i] = dist[i];
-        sortedOrder[i] = order[i];
-    }
 	quickSort(order, dist, 0, amount - 1);
 
-    // Restore in reverse order to go from farthest to nearest
-    for (int i = 0; i < amount; i++) {
-        dist[i] = sortedDist[amount - i - 1];
-        order[i] = sortedOrder[amount - i - 1];
+	// Reverse sorted sprites in place
+    for (; start < end; start++, end--) {
+        swap(dist[start], dist[end]);
+        swap(order[start], order[end]);
     }
-    // Free the allocated memory
-    delete[] sortedDist;
-    delete[] sortedOrder;
 }
 
 int main()
