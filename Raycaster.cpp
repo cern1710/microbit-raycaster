@@ -543,8 +543,8 @@ void checkMovement(Player *p, bool *moved)
 	}
 }
 
-void initGame(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
-				WallContext **w, SpriteContext **s)
+void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
+					WallContext **w, SpriteContext **s)
 {
     *lcd = new Adafruit_ST7735(LCD_PIN_CS, LCD_PIN_DC, LCD_PIN_RST,
 							LCD_PIN_MOSI, LCD_PIN_MISO, LCD_PIN_SCLK);
@@ -583,7 +583,7 @@ int main()
 	FloorContext *f;
 	WallContext *w;
 	SpriteContext *s;
-	initGame(&lcd, &p, &f, &w, &s);
+	initRaycaster(&lcd, &p, &f, &w, &s);
 
 	uBit.sleep(STARTUP_TIME_MS);
 
