@@ -312,7 +312,7 @@ int main()
 
 		// Wall casting
 		for (x = 0; x < SCREEN_HEIGHT; x++) {
-			cameraX = (2 * x) / (float)SCREEN_HEIGHT - 1;
+			cameraX = (2 * x / (float)SCREEN_HEIGHT) - 1;
 			rayDirX = dirX + (planeX * cameraX);
 			rayDirY = dirY + (planeY * cameraX);
 
@@ -402,12 +402,13 @@ int main()
 
 		// Sprite casting
 		img_ptr = (uint16_t *) &img[0];
-		invDet = 1.0 / (planeX * dirY - dirX * planeY);	// Required for correct matrix multiplication
+		invDet = 1.0 / (planeX * dirY - dirX * planeY);	// Required for matmul
 		if (moved) {	// Only sort the arrays if we move
+			// We don't need to take the Euclidean distance of sprites
 			for (i = 0; i < NUM_SPRITES; i++) {
 				spriteOrder[i] = i;
 				spriteDistance[i] = (posX - sprite[i].x) * (posX - sprite[i].x) +
-									(posY - sprite[i].y) * (posY - sprite[i].y); // sqrt not taken, unneeded
+									(posY - sprite[i].y) * (posY - sprite[i].y);
 			}
 			sortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
 		}
@@ -419,14 +420,16 @@ int main()
 			spriteX = currentSprite.x - posX;
 			spriteY = currentSprite.y - posY;
 
-			// Transform sprite with the inverse camera matrix
-			transformX = invDet * (dirY * spriteX - dirX * spriteY);
-
 			// This is the depth inside the screen, that what Z is in 3D,
 			// the distance of sprite to player, matching sqrt(spriteDistance[i])
 			transformY = invDet * (-planeY * spriteX + planeX * spriteY);
+			if (transformY <= 0)  // Skip this sprite if it's behind player
+				continue;
 
+			// Transform sprite with the inverse camera matrix
+			transformX = invDet * (dirY * spriteX - dirX * spriteY);
 			spriteScreenX = int((SCREEN_HEIGHT / 2) * (1 + transformX / transformY));
+
 			vMoveScreen = int(V_MOVE / transformY);
 
 			// Calculate height of the sprite on screen (lowest and highest pixel to fill current stripe)
@@ -464,6 +467,7 @@ int main()
 		// Tie our movement/rotation speed to framerate
 		endTime = system_timer_current_time();
 		frameTime = (endTime - startTime) / 1000.0;
+
 		moveSpeed = frameTime * 4.0; // Squares/second
 		rotSpeed = frameTime * 2.0;  // Radians/second
 		moved = false;
