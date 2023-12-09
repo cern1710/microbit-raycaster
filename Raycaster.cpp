@@ -1,8 +1,6 @@
 #include "MicroBit.h"
 #include "Adafruit_ST7735.h"
 
-MicroBit uBit;
-
 // Define the MICROBIT EDGE CONNECTOR pins where the display is connected...
 #define LCD_PIN_CS      2
 #define LCD_PIN_DC      1
@@ -86,7 +84,6 @@ struct WallContext {
 	float wallX;
 	float step;
 	float texPos;
-
 	int mapX;
 	int mapY;
 	int stepX;
@@ -107,9 +104,7 @@ struct SpriteContext {
 	float spriteY;
 	float transformX;
 	float transformY;
-
 	Sprite currentSprite;
-
 	int texX;
 	int texY;
 	int drawStartX;
@@ -182,6 +177,8 @@ const Sprite sprite[NUM_SPRITES] =
 	{10.5, 15.8,8},
 };
 
+MicroBit uBit;
+
 template <typename T>
 void swap(T& a, T& b)
 {
@@ -223,7 +220,7 @@ void sortSprites(int* order, float* dist, int amount)
 
 	quickSort(order, dist, 0, amount - 1);
 
-	// Reverse sorted sprites in place
+	// Reverse sorted sprites
     for (; start < end; start++, end--) {
         swap(dist[start], dist[end]);
         swap(order[start], order[end]);
@@ -519,6 +516,7 @@ void checkMovement(Player *p, bool *moved)
 {
 	float oldDirX, oldPlaneX;
 
+	*moved = false;
 	if (uBit.buttonAB.isPressed()) {	// Move forward
 		if (worldMap[int(p->posX + p->dirX * p->moveSpeed)][int(p->posY)] == false)
 			p->posX += p->dirX * p->moveSpeed;
@@ -606,8 +604,6 @@ int main()
 
 		p->moveSpeed = frameTime * 4.0; // Squares/second
 		p->rotSpeed = frameTime * 2.0;  // Radians/second
-		moved = false;
-
 		checkMovement(p, &moved);
 	}
 }
