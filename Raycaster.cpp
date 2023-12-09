@@ -1,7 +1,5 @@
 #include "MicroBit.h"
 #include "Adafruit_ST7735.h"
-#include <stdio.h>
-#include <stdlib.h>
 
 // Define the MICROBIT EDGE CONNECTOR pins where the display is connected...
 #define LCD_PIN_CS      2
@@ -68,10 +66,8 @@ struct FloorContext {
 	float rayDirX1;
 	float rayDirY0;
 	float rayDirY1;
-	int cellX;
-	int cellY;
-	int tx;
-	int ty;
+	int texX;
+	int texY;
 };
 
 struct WallContext {
@@ -115,7 +111,6 @@ struct SpriteContext {
 	int drawEndY;
 	int spriteHeight;
 	int spriteScreenX;
-	int vMoveScreen;
 };
 
 const int worldMap[MAP_WIDTH][MAP_HEIGHT] =
@@ -151,24 +146,22 @@ int spriteOrder[NUM_SPRITES];
 float spriteDistance[NUM_SPRITES];
 uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
 
+// Generate random sprites with random textures
 const Sprite sprite[NUM_SPRITES] =
 {
-	{20.5, 11.5, 6}, // Green light in front of playerstart
-	// Green lights in every room
-	{18.5,4.5, 6},
-	{10.0,4.5, 6},
-	{10.0,12.5,6},
-	{3.5, 6.5, 6},
-	{3.5, 20.5,6},
-	{3.5, 14.5,6},
-	{14.5,20.5,6},
+	{20.5, 11.5, 6},
+	{18.5, 4.5,  6},
+	{10.0, 4.5,  6},
+	{10.0, 12.5, 6},
+	{3.5,  6.5,  6},
+	{3.5,  20.5, 6},
+	{3.5,  14.5, 6},
+	{14.5, 20.5, 6},
 
-	// Row of pillars in front of wall
 	{18.5, 10.5, 5},
 	{18.5, 11.5, 5},
 	{18.5, 12.5, 5},
 
-	// Barrels around the map
 	{21.5, 1.5,  9},
 	{15.5, 1.5,  9},
 	{16.0, 1.8,  9},
@@ -232,34 +225,35 @@ void sortSprites(int* order, float* dist, int amount)
 void createTextures()
 {
 	int xorcolor, xcolor;
-	// NOTE: color representation is R-B-G!!!
-	// Used for texture mapping
+	int index;
 
+	// NOTE: color representation is R-B-G!!!
 	for (int x = 0; x < TEX_WIDTH; x++) {
 		for (int y = 0; y < TEX_HEIGHT; y++) {
+			index = TEX_WIDTH * y + x;
 			xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
 			xcolor = x - x * 32 / TEX_HEIGHT;
 
-			texture[0][TEX_WIDTH * y + x] = (21 * (x != y && x != TEX_WIDTH - y)) << 11; // Red with black cross
-			texture[1][TEX_WIDTH * y + x] = xorcolor; // XOR green
-			texture[2][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)) << 11; // Red bricks
-			texture[3][TEX_WIDTH * y + x] = xcolor << 11; // Red gradient
-			texture[4][TEX_WIDTH * y + x] = 21 + 21*32 + 22*2048; // Flat grey texture
+			texture[0][index] = (21 * (x != y && x != TEX_WIDTH - y)) << 11; // Red with black cross
+			texture[1][index] = xorcolor; // XOR green
+			texture[2][index] = (31 * (x % 4 && y % 4)) << 11; // Red bricks
+			texture[3][index] = xcolor << 11; // Red gradient
+			texture[4][index] = 21 + 21*32 + 22*2048; // Flat grey texture
 
 			// Twin Peaks floor pattern
         	if (((y + (x % 8 < 4 ? x : 7 - x)) / 4) % 2 == 0)
-				texture[5][TEX_WIDTH * y + x] = 0; // Black
+				texture[5][index] = 0; // Black
 			else
-				texture[5][TEX_WIDTH * y + x] = 0xFFFF; // White
+				texture[5][index] = 0xFFFF; // White
 
-			texture[6][TEX_WIDTH * y + x] = (0b1010000011001001 * (x % 3 && y % 3)); // Blue bricks
-			texture[7][TEX_WIDTH * y + x] = xorcolor << 3;
-			texture[8][TEX_WIDTH * y + x] = xcolor << 7;
+			texture[6][index] = (0b1010000011001001 * (x % 3 && y % 3)); // Blue bricks
+			texture[7][index] = xorcolor << 3;
+			texture[8][index] = xcolor << 7;
 
         	if (((x + (y % 8 < 4 ? y : 7 - y)) / 4) % 2 == 0)
-				texture[9][TEX_WIDTH * y + x] = 0; // Black
+				texture[9][index] = 0; // Black
 			else
-				texture[9][TEX_WIDTH * y + x] = 0b1111100000011111; // Yellow
+				texture[9][index] = 0b1111100000011111; // Yellow
 		}
 	}
 }
@@ -270,22 +264,19 @@ void linearInterpolation(uint16_t *img_ptr, FloorContext *f, int current_y)
 
 	for (int x = 0; x < SCREEN_HEIGHT; x++) {
 		// The cell coord is simply got from the integer parts of floorX and floorY
-		f->cellX = (int)(f->floorX);
-		f->cellY = (int)(f->floorY);
-
 		// Get texture coordinate from the fractional part
-		f->tx = (int)(TEX_WIDTH * (f->floorX - f->cellX)) & TEX_MASK;
-		f->ty = (int)(TEX_HEIGHT * (f->floorY - f->cellY)) & TEX_MASK;
+		f->texX = (int)(TEX_WIDTH * (f->floorX - int(f->floorX))) & TEX_MASK;
+		f->texY = (int)(TEX_HEIGHT * (f->floorY - int(f->floorY))) & TEX_MASK;
 
 		f->floorX += f->realFloorStepX;
 		f->floorY += f->realFloorStepY;
 
 		// Inverse ceiling and floor
-		color = texture[CEILING_TEXTURE][TEX_WIDTH * f->ty + f->tx];
+		color = texture[CEILING_TEXTURE][TEX_WIDTH * f->texY + f->texX];
 		img_ptr[x * SCREEN_WIDTH + current_y] = color; // Make a bit darker
 
 		// Floor (symmetrical, at screenHeight - y - 1 instead of y)
-		color = texture[FLOOR_TEXTURE][TEX_WIDTH * f->ty + f->tx];
+		color = texture[FLOOR_TEXTURE][TEX_WIDTH * f->texY + f->texX];
 		img_ptr[(x + 1) * SCREEN_WIDTH - (current_y + 1)] = (color >> 1) & 0x7BEF;
 	}
 }
@@ -349,6 +340,7 @@ void calculateRay(Player *p, WallContext *w)
 	}
 }
 
+/* Digital differential analyser algorithm */
 void performDDA(WallContext *w)
 {
 	w->hit = 0;
@@ -445,13 +437,11 @@ void calculateSpriteProjection(Player *p, SpriteContext *s)
 	s->transformX = s->invDet * (p->dirY * s->spriteX - p->dirX * s->spriteY);
 	s->spriteScreenX = int((SCREEN_HEIGHT / 2) * (1 + s->transformX / s->transformY));
 
-	s->vMoveScreen = int(V_MOVE / s->transformY);
-
 	// Calculate height of the sprite on screen (lowest and highest pixel to fill current stripe)
 	// Use transformY instead of real distance to prevent fisheye effect
 	s->spriteHeight = abs(int(SCREEN_WIDTH / (s->transformY)));
-	s->drawStartY = max(0, -s->spriteHeight / 2 + SCREEN_HALF + s->vMoveScreen);
-	s->drawEndY = min(SCREEN_WIDTH, s->spriteHeight / 2 + SCREEN_HALF + s->vMoveScreen);
+	s->drawStartY = max(0, -s->spriteHeight / 2 + SCREEN_HALF);
+	s->drawEndY = min(SCREEN_WIDTH, s->spriteHeight / 2 + SCREEN_HALF);
 
 	// Calculate width of the sprite (assumes same as height)
 	s->drawStartX = max(0, -s->spriteHeight / 2 + s->spriteScreenX);
@@ -473,8 +463,7 @@ void renderSprite(uint16_t *img_ptr, SpriteContext *s)
 		if (s->transformY > 0 && s->transformY < zBuffer[x]) {
 			for (int y = s->drawStartY; y < s->drawEndY; y++) {
 				// Use fixed point arithmetic to calculate texY
-				s->texY = TEX_WIDTH * (16 * ((y - s->vMoveScreen) * 2 +
-							s->spriteHeight - SCREEN_WIDTH)) / (32 * s->spriteHeight);
+				s->texY = TEX_WIDTH * (16 * (y * 2 + s->spriteHeight - SCREEN_WIDTH)) / (32 * s->spriteHeight);
 				color = tex_ptr[TEX_WIDTH * s->texY + s->texX]; // Get current color from texture
 				if ((color & EMPTY_MASK) != 0)
 					img_ptr[x * SCREEN_WIDTH + y] = color; // Black is the invisible color
