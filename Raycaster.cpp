@@ -1,5 +1,7 @@
 #include "MicroBit.h"
 #include "Adafruit_ST7735.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 // Define the MICROBIT EDGE CONNECTOR pins where the display is connected...
 #define LCD_PIN_CS      2
@@ -22,11 +24,11 @@
 #define SCREEN_HEIGHT   160
 #define SCREEN_HALF		((SCREEN_WIDTH) / 2)
 
-#define FLOOR_TEXTURE		8
-#define CEILING_TEXTURE		9
+#define FLOOR_TEXTURE		5
+#define CEILING_TEXTURE		2
 #define DISTANCE_THRESHOLD 	10
 
-#define NUM_TEXTURES	11
+#define NUM_TEXTURES	10
 #define NUM_SPRITES		19
 
 // Parameters for scaling and moving the sprites
@@ -151,30 +153,30 @@ uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
 
 const Sprite sprite[NUM_SPRITES] =
 {
-	{20.5, 11.5, 10}, // Green light in front of playerstart
+	{20.5, 11.5, 6}, // Green light in front of playerstart
 	// Green lights in every room
-	{18.5,4.5, 10},
-	{10.0,4.5, 10},
-	{10.0,12.5,10},
-	{3.5, 6.5, 10},
-	{3.5, 20.5,10},
-	{3.5, 14.5,10},
-	{14.5,20.5,10},
+	{18.5,4.5, 6},
+	{10.0,4.5, 6},
+	{10.0,12.5,6},
+	{3.5, 6.5, 6},
+	{3.5, 20.5,6},
+	{3.5, 14.5,6},
+	{14.5,20.5,6},
 
 	// Row of pillars in front of wall
-	{18.5, 10.5, 9},
-	{18.5, 11.5, 9},
-	{18.5, 12.5, 9},
+	{18.5, 10.5, 5},
+	{18.5, 11.5, 5},
+	{18.5, 12.5, 5},
 
 	// Barrels around the map
-	{21.5, 1.5, 8},
-	{15.5, 1.5, 8},
-	{16.0, 1.8, 8},
-	{16.2, 1.2, 8},
-	{3.5,  2.5, 8},
-	{9.5, 15.5, 8},
-	{10.0, 15.1,8},
-	{10.5, 15.8,8},
+	{21.5, 1.5,  9},
+	{15.5, 1.5,  9},
+	{16.0, 1.8,  9},
+	{16.2, 1.2,  9},
+	{3.5,  2.5,  9},
+	{9.5, 15.5,  9},
+	{10.0, 15.1, 9},
+	{10.5, 15.8, 9},
 };
 
 MicroBit uBit;
@@ -229,46 +231,37 @@ void sortSprites(int* order, float* dist, int amount)
 
 void createTextures()
 {
-	int xorcolor, xcolor, xycolor;
-	// int ycolor;
+	int xorcolor, xcolor;
 	// NOTE: color representation is R-B-G!!!
 	// Used for texture mapping
+
 	for (int x = 0; x < TEX_WIDTH; x++) {
 		for (int y = 0; y < TEX_HEIGHT; y++) {
 			xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
 			xcolor = x - x * 32 / TEX_HEIGHT;
-			// ycolor = y - y * 32 / TEX_HEIGHT;
-			xycolor = y * 16 / TEX_HEIGHT + x * 16 / TEX_WIDTH;
 
 			texture[0][TEX_WIDTH * y + x] = (21 * (x != y && x != TEX_WIDTH - y)) << 11; // Red with black cross
-			texture[1][TEX_WIDTH * y + x] = xycolor << 11 | xycolor << 6 | xycolor; // Sloped greyscale
-			texture[2][TEX_WIDTH * y + x] = xycolor << 6 | xycolor; // Sloped yellow gradient
-			texture[3][TEX_WIDTH * y + x] = xorcolor << 11 | xorcolor << 6 | xorcolor; // XOR greyscale
-			texture[4][TEX_WIDTH * y + x] = xorcolor; // XOR green
-			texture[5][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)) << 11; // Red bricks
-			texture[6][TEX_WIDTH * y + x] = xcolor << 11; // Red gradient
-			texture[7][TEX_WIDTH * y + x] = 16 + 16*32 + 16*2048; // Flat grey texture
+			texture[1][TEX_WIDTH * y + x] = xorcolor; // XOR green
+			texture[2][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)) << 11; // Red bricks
+			texture[3][TEX_WIDTH * y + x] = xcolor << 11; // Red gradient
+			texture[4][TEX_WIDTH * y + x] = 21 + 21*32 + 22*2048; // Flat grey texture
 
 			// Twin Peaks floor pattern
         	if (((y + (x % 8 < 4 ? x : 7 - x)) / 4) % 2 == 0)
-				texture[8][TEX_WIDTH * y + x] = 0; // Black
+				texture[5][TEX_WIDTH * y + x] = 0; // Black
 			else
-				texture[8][TEX_WIDTH * y + x] = 0xFFFF; // White
+				texture[5][TEX_WIDTH * y + x] = 0xFFFF; // White
 
-			texture[9][TEX_WIDTH * y + x] = (0b1010000001001001 * (x % 4 && y % 4)); // Blue bricks
-			texture[10][TEX_WIDTH * y + x] = (20 * (x % 4 && y % 4)); // Green bricks
+			texture[6][TEX_WIDTH * y + x] = (0b1010000011001001 * (x % 3 && y % 3)); // Blue bricks
+			texture[7][TEX_WIDTH * y + x] = xorcolor << 3;
+			texture[8][TEX_WIDTH * y + x] = xcolor << 7;
+
+        	if (((x + (y % 8 < 4 ? y : 7 - y)) / 4) % 2 == 0)
+				texture[9][TEX_WIDTH * y + x] = 0; // Black
+			else
+				texture[9][TEX_WIDTH * y + x] = 0b1111100000011111; // Yellow
 		}
 	}
-
-	// for (int x = 0; x < TEX_WIDTH; x++)
-	// 	for (int y = 0; y < TEX_HEIGHT; y++)
-			// texture[10][TEX_WIDTH * y + x] = 0b1010000001001001; // Black
-	// texture[10][TEX_WIDTH * 15 + 8] = 1;
-	// texture[10][TEX_WIDTH * 15 + 9] = 1;
-	// texture[10][TEX_WIDTH * 14 + 8] = 1;
-	// texture[10][TEX_WIDTH * 14 + 9] = 1;
-	// texture[10][TEX_WIDTH * 13 + 8] = 1;
-	// texture[10][TEX_WIDTH * 13 + 9] = 1;
 }
 
 void linearInterpolation(uint16_t *img_ptr, FloorContext *f, int current_y)
@@ -483,7 +476,7 @@ void renderSprite(uint16_t *img_ptr, SpriteContext *s)
 				s->texY = TEX_WIDTH * (16 * ((y - s->vMoveScreen) * 2 +
 							s->spriteHeight - SCREEN_WIDTH)) / (32 * s->spriteHeight);
 				color = tex_ptr[TEX_WIDTH * s->texY + s->texX]; // Get current color from texture
-				if ((color & 0xFFFF) != 0)
+				if ((color & EMPTY_MASK) != 0)
 					img_ptr[x * SCREEN_WIDTH + y] = color; // Black is the invisible color
 			}
 		}
