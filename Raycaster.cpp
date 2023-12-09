@@ -11,6 +11,8 @@ MicroBit uBit;
 #define LCD_PIN_MISO    14
 #define LCD_PIN_SCLK    13
 
+#define STARTUP_TIME_MS	200
+
 #define TEX_WIDTH		16
 #define TEX_HEIGHT		16
 #define TEX_MASK		((TEX_HEIGHT) - 1)
@@ -30,15 +32,96 @@ MicroBit uBit;
 #define NUM_SPRITES		19
 
 // Parameters for scaling and moving the sprites
-#define U_DIV 	1
-#define V_DIV 	1
 #define V_MOVE 	0.0
 
 #define COLOR_MASK	0xEFBB
+#define EMPTY_MASK	0xFFFF
 
-#define MAX_FLOAT	1e30f
+#define MAX_FLOAT	(1e30f)
 
-int worldMap[MAP_WIDTH][MAP_HEIGHT] =
+struct Sprite {
+	float x;
+	float y;
+	int texture;
+};
+
+struct Player {
+	float posX;
+	float posY;
+	float dirX;
+	float dirY;
+	float planeX;
+	float planeY;
+	float moveSpeed;
+	float rotSpeed;
+};
+
+struct FloorContext {
+	float floorX;
+	float floorY;
+	float floorStepX;
+	float floorStepY;
+	float realFloorStepX;
+	float realFloorStepY;
+	float rowDistance;
+	float rayDirX0;
+	float rayDirX1;
+	float rayDirY0;
+	float rayDirY1;
+	int cellX;
+	int cellY;
+	int tx;
+	int ty;
+};
+
+struct WallContext {
+	float cameraX;	// X-coordinate in camera space
+	float rayDirX;
+	float rayDirY;
+	float sideDistX;
+	float sideDistY;
+	float deltaX;
+	float deltaY;
+	float perpWallDist;
+	float wallX;
+	float step;
+	float texPos;
+
+	int mapX;
+	int mapY;
+	int stepX;
+	int stepY;
+	int side;
+	int texX;
+	int lineHeight;
+	int drawStart;
+	int drawEnd;
+	int texNum;
+	int skipStep;
+	int hit;
+};
+
+struct SpriteContext {
+	float invDet;
+	float spriteX;
+	float spriteY;
+	float transformX;
+	float transformY;
+
+	Sprite currentSprite;
+
+	int texX;
+	int texY;
+	int drawStartX;
+	int drawEndX;
+	int drawStartY;
+	int drawEndY;
+	int spriteHeight;
+	int spriteScreenX;
+	int vMoveScreen;
+};
+
+const int worldMap[MAP_WIDTH][MAP_HEIGHT] =
 {
   {8,8,8,8,8,8,8,8,8,8,8,4,4,6,4,4,6,4,6,4,4,4,6,4},
   {8,0,0,0,0,0,0,0,0,0,8,4,0,0,0,0,0,0,0,0,0,0,0,4},
@@ -71,13 +154,7 @@ int spriteOrder[NUM_SPRITES];
 float spriteDistance[NUM_SPRITES];
 uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
 
-struct Sprite {
-	float x;
-	float y;
-	int texture;
-};
-
-Sprite sprite[NUM_SPRITES] =
+const Sprite sprite[NUM_SPRITES] =
 {
 	{20.5, 11.5, 10}, // Green light in front of playerstart
 	// Green lights in every room
@@ -153,92 +230,14 @@ void sortSprites(int* order, float* dist, int amount)
     }
 }
 
-struct Player {
-	float posX;
-	float posY;
-	float dirX;
-	float dirY;
-	float planeX;
-	float planeY;
-	float moveSpeed;
-	float rotSpeed;
-};
-
-struct FloorContext {
-	float floorX;
-	float floorY;
-	float floorStepX;
-	float floorStepY;
-	float realFloorStepX;
-	float realFloorStepY;
-	float rowDistance;
-	float rayDirX0;
-	float rayDirX1;
-	float rayDirY0;
-	float rayDirY1;
-	int cellX;
-	int cellY;
-	int tx;
-	int ty;
-};
-
-struct WallContext {
-	float cameraX;	// X-coordinate in camera space
-	float rayDirX;
-	float rayDirY;
-	float sideDistX;
-	float sideDistY;
-	float deltaX;
-	float deltaY;
-	float perpWallDist;
-	float wallX;
-	float step;
-	float texPos;
-
-	int mapX;
-	int mapY;
-	int stepX;
-	int stepY;
-	int side;
-	int texX;
-	int lineHeight;
-	int drawStart;
-	int drawEnd;
-	int texNum;
-	int skipStep;
-	int hit;
-};
-
-struct SpriteContext {
-	float invDet;
-	float spriteX;
-	float spriteY;
-	float transformX;
-	float transformY;
-
-	Sprite currentSprite;
-
-	int texX;
-	int texY;
-	int drawStartX;
-	int drawEndX;
-	int drawStartY;
-	int drawEndY;
-	int spriteWidth;
-	int spriteHeight;
-	int spriteScreenX;
-	int vMoveScreen;
-};
-
 void createTextures()
 {
-	int x, y;
 	int xorcolor, xcolor, xycolor;
 	// int ycolor;
 	// NOTE: color representation is R-B-G!!!
 	// Used for texture mapping
-	for (x = 0; x < TEX_WIDTH; x++) {
-		for (y = 0; y < TEX_HEIGHT; y++) {
+	for (int x = 0; x < TEX_WIDTH; x++) {
+		for (int y = 0; y < TEX_HEIGHT; y++) {
 			xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
 			xcolor = x - x * 32 / TEX_HEIGHT;
 			// ycolor = y - y * 32 / TEX_HEIGHT;
@@ -317,7 +316,7 @@ void floorCasting(uint16_t *img_ptr, Player *p, FloorContext *f)
 		// (Vertical position of camera) / (current y-coord compared to horizon)
 		f->rowDistance = float(SCREEN_HALF) / (y - SCREEN_HALF);
 
-		// Calculate the real world step vector we have to add for each x (parallel to camera plane)
+		// Calculate real world step vector added for each x (parallel to camera plane)
 		// Adding step by step avoids multiplications with a weight in the inner loop
 		f->realFloorStepX = f->rowDistance * f->floorStepX;
 		f->realFloorStepY = f->rowDistance * f->floorStepY;
@@ -398,9 +397,8 @@ void calculateWallStripe(Player *p, WallContext *w)
 
 void renderWallTexture(uint16_t *img_ptr, Player *p, WallContext *w)
 {
-	int y;
 	uint16_t *tex_ptr;
-	uint16_t mask = (w->side == 1) ? COLOR_MASK : 0xFFFF;
+	uint16_t mask = (w->side == 1) ? COLOR_MASK : EMPTY_MASK;
 
 	w->texX = int(w->wallX * float(TEX_WIDTH));	// X-coordinate of texture
 	if ((w->side == 0 && w->rayDirX > 0) || (w->side == 1 && w->rayDirY < 0))
@@ -422,7 +420,7 @@ void renderWallTexture(uint16_t *img_ptr, Player *p, WallContext *w)
 	// Cast the texture coordinate to integer, and mask in case of overflow
 	w->texNum = worldMap[w->mapX][w->mapY] - 1;	// Subtract 1 to use texture 0
 	tex_ptr = (uint16_t *) &texture[w->texNum][w->texX];
-	for (y = w->drawStart; y < w->drawEnd; y += w->skipStep) {
+	for (int y = w->drawStart; y < w->drawEnd; y += w->skipStep) {
 		img_ptr[y] = (tex_ptr[TEX_WIDTH * ((int)w->texPos & TEX_MASK)] & mask);
 		w->texPos += w->skipStep * w->step;
 	}
@@ -433,13 +431,11 @@ void wallCasting(uint16_t *img_ptr, Player *p, WallContext *w)
 	for (int x = 0; x < SCREEN_HEIGHT; x++) {
 		w->cameraX = (2 * x / (float)SCREEN_HEIGHT) - 1;
 		calculateRay(p, w);
-
-		// Digital differential analyzer (DDA) algorithm
-		performDDA(w);
+		performDDA(w);	// Digital differential analyzer (DDA) algorithm
 		calculateWallStripe(p, w);
 		renderWallTexture(img_ptr, p, w);
 		zBuffer[x] = w->perpWallDist;	// Update z buffer for current x value on screen
-		img_ptr += SCREEN_WIDTH;	// Update image pointer
+		img_ptr += SCREEN_WIDTH;		// Update image pointer
 	}
 }
 
@@ -462,24 +458,26 @@ void calculateSpriteProjection(Player *p, SpriteContext *s)
 	s->vMoveScreen = int(V_MOVE / s->transformY);
 
 	// Calculate height of the sprite on screen (lowest and highest pixel to fill current stripe)
-	s->spriteHeight = abs(int(SCREEN_WIDTH / (s->transformY))) / V_DIV; // transformY instead of real distance prevents fisheye
+	// Use transformY instead of real distance to prevent fisheye effect
+	s->spriteHeight = abs(int(SCREEN_WIDTH / (s->transformY)));
 	s->drawStartY = max(0, -s->spriteHeight / 2 + SCREEN_HALF + s->vMoveScreen);
 	s->drawEndY = min(SCREEN_WIDTH, s->spriteHeight / 2 + SCREEN_HALF + s->vMoveScreen);
 
-	// Calculate width of the sprite
-	s->spriteWidth = abs(int(SCREEN_WIDTH / (s->transformY))) / U_DIV;
-	s->drawStartX = max(0, -s->spriteWidth / 2 + s->spriteScreenX);
-	s->drawEndX = min(SCREEN_HEIGHT, s->spriteWidth / 2 + s->spriteScreenX);
+	// Calculate width of the sprite (assumes same as height)
+	s->drawStartX = max(0, -s->spriteHeight / 2 + s->spriteScreenX);
+	s->drawEndX = min(SCREEN_HEIGHT, s->spriteHeight / 2 + s->spriteScreenX);
 }
 
-void renderSprite(uint16_t *img_ptr, SpriteContext *s) {
+void renderSprite(uint16_t *img_ptr, SpriteContext *s)
+{
 	uint16_t color;
 	uint16_t *tex_ptr;
 
 	// Loop through every vertical stripe of the sprite on screen (x)
 	tex_ptr = (uint16_t *) texture[s->currentSprite.texture];
 	for (int x = s->drawStartX; x < s->drawEndX; x++) {
-		s->texX = int((x + (s->spriteWidth / 2 - s->spriteScreenX)) * TEX_WIDTH / s->spriteWidth);
+		s->texX = (x + (s->spriteHeight / 2 - s->spriteScreenX))
+						* TEX_WIDTH / s->spriteHeight;
 		// 1) It's in front of camera plane so you don't see things behind you
 		// 2) ZBuffer, with perpendicular distance
 		if (s->transformY > 0 && s->transformY < zBuffer[x]) {
@@ -498,6 +496,7 @@ void renderSprite(uint16_t *img_ptr, SpriteContext *s) {
 void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
 {
 	s->invDet = 1.0 / (p->planeX * p->dirY - p->dirX * p->planeY);	// Required for matmul
+
 	if (moved) {	// Only sort the arrays if we move
 		// We don't need to take the Euclidean distance of sprites
 		for (int i = 0; i < NUM_SPRITES; i++) {
@@ -574,20 +573,21 @@ void initGame(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
 int main()
 {
 	uBit.init();
-	ManagedBuffer img(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(int16_t));
-	Adafruit_ST7735 *lcd;
+
 	uint64_t startTime, endTime;
 	uint16_t *img_ptr;
 	float frameTime;
 	bool moved = true;
 
+	ManagedBuffer img(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(int16_t));
+	Adafruit_ST7735 *lcd;
 	Player *p;
 	FloorContext *f;
 	WallContext *w;
 	SpriteContext *s;
 	initGame(&lcd, &p, &f, &w, &s);
 
-	uBit.sleep(200); // Start up
+	uBit.sleep(STARTUP_TIME_MS);
 
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
