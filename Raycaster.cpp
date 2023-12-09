@@ -1,5 +1,7 @@
 #include "MicroBit.h"
 #include "Adafruit_ST7735.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 // Define the MICROBIT EDGE CONNECTOR pins where the display is connected...
 #define LCD_PIN_CS      2
@@ -28,9 +30,6 @@
 
 #define NUM_TEXTURES	10
 #define NUM_SPRITES		19
-
-// Parameters for scaling and moving the sprites
-#define V_MOVE 	0.0
 
 #define COLOR_MASK	0xEFBB
 #define EMPTY_MASK	0xFFFF
@@ -66,6 +65,8 @@ struct FloorContext {
 	float rayDirX1;
 	float rayDirY0;
 	float rayDirY1;
+	int cellX;
+	int cellY;
 	int texX;
 	int texY;
 };
@@ -113,7 +114,7 @@ struct SpriteContext {
 	int spriteScreenX;
 };
 
-const int worldMap[MAP_WIDTH][MAP_HEIGHT] =
+const char worldMap[MAP_WIDTH][MAP_HEIGHT] =
 {
   {8,8,8,8,8,8,8,8,8,8,8,4,4,6,4,4,6,4,6,4,4,4,6,4},
   {8,0,0,0,0,0,0,0,0,0,8,4,0,0,0,0,0,0,0,0,0,0,0,4},
@@ -146,7 +147,6 @@ int spriteOrder[NUM_SPRITES];
 float spriteDistance[NUM_SPRITES];
 uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
 
-// Generate random sprites with random textures
 const Sprite sprite[NUM_SPRITES] =
 {
 	{20.5, 11.5, 6},
@@ -225,35 +225,34 @@ void sortSprites(int* order, float* dist, int amount)
 void createTextures()
 {
 	int xorcolor, xcolor;
-	int index;
-
 	// NOTE: color representation is R-B-G!!!
+	// Used for texture mapping
+
 	for (int x = 0; x < TEX_WIDTH; x++) {
 		for (int y = 0; y < TEX_HEIGHT; y++) {
-			index = TEX_WIDTH * y + x;
 			xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
 			xcolor = x - x * 32 / TEX_HEIGHT;
 
-			texture[0][index] = (21 * (x != y && x != TEX_WIDTH - y)) << 11; // Red with black cross
-			texture[1][index] = xorcolor; // XOR green
-			texture[2][index] = (31 * (x % 4 && y % 4)) << 11; // Red bricks
-			texture[3][index] = xcolor << 11; // Red gradient
-			texture[4][index] = 21 + 21*32 + 22*2048; // Flat grey texture
+			texture[0][TEX_WIDTH * y + x] = (21 * (x != y && x != TEX_WIDTH - y)) << 11; // Red with black cross
+			texture[1][TEX_WIDTH * y + x] = xorcolor; // XOR green
+			texture[2][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)) << 11; // Red bricks
+			texture[3][TEX_WIDTH * y + x] = xcolor << 11; // Red gradient
+			texture[4][TEX_WIDTH * y + x] = 21 + 21*32 + 22*2048; // Flat grey texture
 
 			// Twin Peaks floor pattern
         	if (((y + (x % 8 < 4 ? x : 7 - x)) / 4) % 2 == 0)
-				texture[5][index] = 0; // Black
+				texture[5][TEX_WIDTH * y + x] = 0; // Black
 			else
-				texture[5][index] = 0xFFFF; // White
+				texture[5][TEX_WIDTH * y + x] = 0xFFFF; // White
 
-			texture[6][index] = (0b1010000011001001 * (x % 3 && y % 3)); // Blue bricks
-			texture[7][index] = xorcolor << 3;
-			texture[8][index] = xcolor << 7;
+			texture[6][TEX_WIDTH * y + x] = (0b1010000011001001 * (x % 3 && y % 3)); // Blue bricks
+			texture[7][TEX_WIDTH * y + x] = xorcolor << 3;
+			texture[8][TEX_WIDTH * y + x] = xcolor << 7;
 
         	if (((x + (y % 8 < 4 ? y : 7 - y)) / 4) % 2 == 0)
-				texture[9][index] = 0; // Black
+				texture[9][TEX_WIDTH * y + x] = 0; // Black
 			else
-				texture[9][index] = 0b1111100000011111; // Yellow
+				texture[9][TEX_WIDTH * y + x] = 0b1111100000011111; // Yellow
 		}
 	}
 }
@@ -264,9 +263,12 @@ void linearInterpolation(uint16_t *img_ptr, FloorContext *f, int current_y)
 
 	for (int x = 0; x < SCREEN_HEIGHT; x++) {
 		// The cell coord is simply got from the integer parts of floorX and floorY
+		f->cellX = (int)(f->floorX);
+		f->cellY = (int)(f->floorY);
+
 		// Get texture coordinate from the fractional part
-		f->texX = (int)(TEX_WIDTH * (f->floorX - int(f->floorX))) & TEX_MASK;
-		f->texY = (int)(TEX_HEIGHT * (f->floorY - int(f->floorY))) & TEX_MASK;
+		f->texX = (int)(TEX_WIDTH * (f->floorX - f->cellX)) & TEX_MASK;
+		f->texY = (int)(TEX_HEIGHT * (f->floorY - f->cellY)) & TEX_MASK;
 
 		f->floorX += f->realFloorStepX;
 		f->floorY += f->realFloorStepY;
@@ -277,7 +279,7 @@ void linearInterpolation(uint16_t *img_ptr, FloorContext *f, int current_y)
 
 		// Floor (symmetrical, at screenHeight - y - 1 instead of y)
 		color = texture[FLOOR_TEXTURE][TEX_WIDTH * f->texY + f->texX];
-		img_ptr[(x + 1) * SCREEN_WIDTH - (current_y + 1)] = (color >> 1) & 0x7BEF;
+		img_ptr[(x + 1) * SCREEN_WIDTH - (current_y + 1)] = color;
 	}
 }
 
@@ -340,7 +342,6 @@ void calculateRay(Player *p, WallContext *w)
 	}
 }
 
-/* Digital differential analyser algorithm */
 void performDDA(WallContext *w)
 {
 	w->hit = 0;
@@ -413,7 +414,7 @@ void wallCasting(uint16_t *img_ptr, Player *p, WallContext *w)
 	for (int x = 0; x < SCREEN_HEIGHT; x++) {
 		w->cameraX = (2 * x / (float)SCREEN_HEIGHT) - 1;
 		calculateRay(p, w);
-		performDDA(w);	// Digital differential analyzer (DDA) algorithm
+		performDDA(w);
 		calculateWallStripe(p, w);
 		renderWallTexture(img_ptr, p, w);
 		zBuffer[x] = w->perpWallDist;	// Update z buffer for current x value on screen
@@ -463,7 +464,8 @@ void renderSprite(uint16_t *img_ptr, SpriteContext *s)
 		if (s->transformY > 0 && s->transformY < zBuffer[x]) {
 			for (int y = s->drawStartY; y < s->drawEndY; y++) {
 				// Use fixed point arithmetic to calculate texY
-				s->texY = TEX_WIDTH * (16 * (y * 2 + s->spriteHeight - SCREEN_WIDTH)) / (32 * s->spriteHeight);
+				s->texY = TEX_WIDTH * (16 * (y * 2 +
+							s->spriteHeight - SCREEN_WIDTH)) / (32 * s->spriteHeight);
 				color = tex_ptr[TEX_WIDTH * s->texY + s->texX]; // Get current color from texture
 				if ((color & EMPTY_MASK) != 0)
 					img_ptr[x * SCREEN_WIDTH + y] = color; // Black is the invisible color
@@ -548,12 +550,14 @@ void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
 	(*p)->planeY = 0.66;
 
 	createTextures();
+
+	// Initialise Microbit
+	uBit.init();
+	uBit.sleep(STARTUP_TIME_MS);
 }
 
 int main()
 {
-	uBit.init();
-
 	uint64_t startTime, endTime;
 	uint16_t *img_ptr;
 	float frameTime;
@@ -565,9 +569,8 @@ int main()
 	FloorContext *f;
 	WallContext *w;
 	SpriteContext *s;
-	initRaycaster(&lcd, &p, &f, &w, &s);
 
-	uBit.sleep(STARTUP_TIME_MS);
+	initRaycaster(&lcd, &p, &f, &w, &s);
 
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
