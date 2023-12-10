@@ -1,7 +1,5 @@
 #include "MicroBit.h"
 #include "Adafruit_ST7735.h"
-#include <stdio.h>
-#include <stdlib.h>
 
 // Define the MICROBIT EDGE CONNECTOR pins where the display is connected...
 #define LCD_PIN_CS      2
