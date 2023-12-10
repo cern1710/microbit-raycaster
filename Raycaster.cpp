@@ -183,7 +183,7 @@ Sprite sprite[NUM_SPRITES] =
 	{10.0, 15.1, 9, true},
 	{10.5, 15.8, 9, true},
 
-	{-1, -1, -1, true}
+	{-1, -1, -1, false}
 };
 
 const char worldMap[MAP_WIDTH][MAP_HEIGHT] =
@@ -553,7 +553,7 @@ void renderSprite(uint16_t *img_ptr, SpriteContext *s)
 }
 
 bool checkCollision(float bulletX, float bulletY, float spriteX, float spriteY) {
-    const float COLLISION_THRESHOLD = 2;
+    const float COLLISION_THRESHOLD = 0.5;
 
     float dx = bulletX - spriteX;
     float dy = bulletY - spriteY;
@@ -562,8 +562,7 @@ bool checkCollision(float bulletX, float bulletY, float spriteX, float spriteY) 
     return distanceSquared < (COLLISION_THRESHOLD * COLLISION_THRESHOLD);
 }
 
-void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s,
-					BulletContext *b, bool moved)
+void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, BulletContext *b)
 {
 	// Inverse camera matrix calculation; used to transform sprite coordinates
 	s->invDet = 1.0 / (p->planeX * p->dirY - p->dirX * p->planeY);
@@ -580,20 +579,17 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s,
             bulletHit = true; // Shot hit a wall
         } else {
             // Check collision with other sprites
-            for (int i = 0; i < NUM_SPRITES; i++) {
+            for (int i = 0; i < NUM_SPRITES - 1; i++) {
                 if (sprite[i].isActive && checkCollision(b->shotX, b->shotY, sprite[i].x, sprite[i].y)) {
                     sprite[i].isActive = false; // Deactivate the sprite
                     bulletHit = true; // Bullet hit a sprite
                 }
             }
         }
-
-        if (bulletHit) {
+        if (bulletHit)
             sprite[19].isActive = false;
-        }
     }
 
-	if (moved) {  // Only sort our sprites if the player has moved
 		for (int i = 0; i < NUM_SPRITES; i++) {
 			spriteOrder[i] = i;
 			// Euclidean distance unnecessary; square the threshold value instead
@@ -601,7 +597,6 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s,
 								(p->posY - sprite[i].y) * (p->posY - sprite[i].y);
 		}
 		sortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
-	}
 
 	// Project and draw sprites after sorting
 	for (int i = 0; i < NUM_SPRITES; i++) {
@@ -654,16 +649,15 @@ void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
  * Update player movement
  *******************************/
 
-void checkPlayerPosition(Player *p, bool *moved)
+void checkPlayerPosition(Player *p)
 {
 	if (P14.getDigitalValue()) {	// Move forward
 		if (!worldMap[int(p->posX + p->dirX * p->moveSpeed)][int(p->posY)])
 			p->posX += p->dirX * p->moveSpeed;
 		if (!worldMap[int(p->posX)][int(p->posY + p->dirY * p->moveSpeed)])
 			p->posY += p->dirY * p->moveSpeed;
-		*moved = true;
 	}
-	else if (P8.getDigitalValue() && !sprite[19].isActive) {	// Pew pew
+	if (P8.getDigitalValue() && !sprite[19].isActive) {	// Pew pew
 		beganAnimation = true;
 	}
 }
@@ -691,10 +685,9 @@ void checkCameraDirection(Player *p)
 	}
 }
 
-void updateMovement(Player *p, bool *moved)
+void updateMovement(Player *p)
 {
-	*moved = false;
-	checkPlayerPosition(p, moved);
+	checkPlayerPosition(p);
 	checkCameraDirection(p);
 }
 
@@ -724,7 +717,6 @@ int main()
 	uint64_t startTime, endTime;
 	uint16_t *img_ptr;
 	float frameTime;
-	bool moved = true;
 
 	ManagedBuffer img(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(int16_t));
 	Adafruit_ST7735 *lcd;
@@ -744,7 +736,7 @@ int main()
 		floorCasting(img_ptr, p, f);
 		wallCasting(img_ptr, p, w);
 		img_ptr = (uint16_t *) &img[0];
-		spriteCasting(img_ptr, p, s, b, moved);
+		spriteCasting(img_ptr, p, s, b);
 
 		// Send image buffer to the screen
 		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
@@ -756,7 +748,7 @@ int main()
 		p->moveSpeed = frameTime * MOV_SPEED_MULTIPLIER; // Squares/second
 		p->rotSpeed = frameTime * ROT_SPEED_MULTIPLIER;  // Radians/second
 
-		updateMovement(p, &moved);
+		updateMovement(p);
 		normaliseVector(p);
 
 		if (beganAnimation) {
