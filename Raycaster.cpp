@@ -48,7 +48,7 @@
 #define MOV_SPEED_MULTIPLIER	4.0
 #define ROT_SPEED_MULTIPLIER	2.0
 
-#define FOV					70
+#define FOV					65
 #define CAMERA_PLANE_LENGTH	(tan((FOV * PI / 180) / 2.0))
 
 struct Sprite {
@@ -529,6 +529,8 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
 	}
 }
 
+#define MMIO32(addr)    (*(volatile uint32_t *)(addr))
+
 #define GPIO_EVENT_DETECT   1
 #define GPIO_EVENT_CLEAR    0
 
@@ -537,22 +539,29 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
 #define EVENT_MODE      1
 #define PSEL_13         (P14 << 8)
 #define FALLING_EDGE    (2 << 16)
-#define MMIO32(addr)    (*(volatile uint32_t *)(addr))
 
-void checkMovement(Player *p, bool *moved)
+/* GPIOTE addresses: base (0x40000600) + offset */
+#define GPIOTE_IN       0x40006100
+#define GPIOTE_CONFIG   0x40006510
+
+void checkMovement(Player *p, bool *moved, int *current_state, int *last_state)
 {
 	float oldDirX, oldPlaneX;
+	*current_state = MMIO32(GPIOTE_IN);
 
 	*moved = false;
-	if (uBit.buttonAB.isPressed()) {	// Move forward
+	if (*current_state == GPIO_EVENT_DETECT &&
+                *last_state == GPIO_EVENT_CLEAR) {	// Move forward
 		if (worldMap[int(p->posX + p->dirX * p->moveSpeed)][int(p->posY)] == false)
 			p->posX += p->dirX * p->moveSpeed;
 		if (worldMap[int(p->posX)][int(p->posY + p->dirY * p->moveSpeed)] == false)
 			p->posY += p->dirY * p->moveSpeed;
 		*moved = true;
+		MMIO32(GPIOTE_IN) = GPIO_EVENT_CLEAR;
 	}
+	*last_state = *current_state;
 	// Both camera direction and camera planes must be rotated
-	else if (uBit.buttonA.isPressed()) {  // Turn left
+	if (uBit.buttonA.isPressed()) {  // Turn left
 		oldDirX = p->dirX;
 		oldPlaneX = p->planeX;
 		p->dirX = p->dirX * cos(p->rotSpeed) - p->dirY * sin(p->rotSpeed);
@@ -614,6 +623,7 @@ void normaliseVector(Player *p)
 	p->planeY = CAMERA_PLANE_LENGTH * -p->dirX;
 
 	// Direction magnitude based on Euclidean distance
+	// We don't need inverse sqrt here
     float dirMag = sqrt(p->dirX * p->dirX + p->dirY * p->dirY);
     if (dirMag != 0) {
         p->dirX /= dirMag;
@@ -636,7 +646,10 @@ int main()
 	SpriteContext *s;
 
 	initRaycaster(&lcd, &p, &f, &w, &s);
+	int current_state = 0, last_state = 0;
 
+	MMIO32(GPIOTE_CONFIG) = EVENT_MODE | PSEL_13 | FALLING_EDGE;
+	int count = 0;
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
 
@@ -656,7 +669,11 @@ int main()
 
 		p->moveSpeed = frameTime * MOV_SPEED_MULTIPLIER; // Squares/second
 		p->rotSpeed = frameTime * ROT_SPEED_MULTIPLIER;  // Radians/second
-		checkMovement(p, &moved);
+		if (count == 1) {
+			checkMovement(p, &moved, &current_state, &last_state);
+			count = 0;
+		}
 		normaliseVector(p);
+		count++;
 	}
 }
