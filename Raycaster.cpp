@@ -48,8 +48,8 @@
 #define MOV_SPEED_MULTIPLIER	4.0
 #define ROT_SPEED_MULTIPLIER	2.0
 
-#define FOV				70
-#define PLANE_LENGTH	(tan((FOV * PI / 180) / 2.0))
+#define FOV					70
+#define CAMERA_PLANE_LENGTH	(tan((FOV * PI / 180) / 2.0))
 
 struct Sprite {
 	float x;
@@ -601,16 +601,23 @@ void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
 	uBit.sleep(STARTUP_TIME_MS);
 }
 
+/**
+ * Updates camera plane and direction vectors.
+ *
+ * Avoids FOV shifting by aligning camera plane to direction vector.
+ * Additional step to normalise direction vector to have unit length.
+ */
 void normaliseVector(Player *p)
 {
-	// Assuming p->dirX and p->dirY form a unit vector
-	p->planeX = PLANE_LENGTH * p->dirY; // 90 degrees rotated version of direction vector
-	p->planeY = PLANE_LENGTH * -p->dirX;
+	// The camera plane is perpendicular to the direction vector
+	p->planeX = CAMERA_PLANE_LENGTH * p->dirY;
+	p->planeY = CAMERA_PLANE_LENGTH * -p->dirX;
 
-    float magnitude = sqrt(p->dirX * p->dirX + p->dirY * p->dirY);
-    if (magnitude != 0) {
-        p->dirX /= magnitude;
-        p->dirY /= magnitude;
+	// Direction magnitude based on Euclidean distance
+    float dirMag = sqrt(p->dirX * p->dirX + p->dirY * p->dirY);
+    if (dirMag != 0) {
+        p->dirX /= dirMag;
+        p->dirY /= dirMag;
     }
 }
 
