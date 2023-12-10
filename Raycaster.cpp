@@ -27,8 +27,8 @@
 #define FLOOR_TEXTURE				5
 #define FLOOR_DISTANCE_THRESHOLD 	10
 
-#define NUM_TEXTURES	10
-#define NUM_SPRITES		19
+#define NUM_TEXTURES	11
+#define NUM_SPRITES		20
 #define SPRITE_DISTANCE_THRESHOLD	100	// (10^2; we don't take sqrt for sprite distance)
 
 #define COLOR_MASK	0xEFBB
@@ -62,6 +62,12 @@ struct Sprite {
 	float x;
 	float y;
 	int texture;
+	bool isActive;
+
+    // Equality comparison operator
+    bool operator!=(const Sprite& other) const {
+        return x != other.x || y != other.y || texture == other.texture || isActive != other.isActive;
+    }
 };
 
 struct Player {
@@ -136,6 +142,14 @@ struct SpriteContext {
 	int spriteScreenX;
 };
 
+struct BulletContext {
+    float shotX;
+    float shotY;
+    float shotDirX;
+    float shotDirY;
+};
+
+bool beganAnimation = false;	// Global state on bullet animation
 float zBuffer[SCREEN_HEIGHT];	// Used to handle sprite-wall occlusion
 float spriteDistance[NUM_SPRITES];
 int spriteOrder[NUM_SPRITES];
@@ -145,29 +159,31 @@ MicroBit uBit;
 MicroBitPin P8(MICROBIT_ID_IO_P8, MICROBIT_PIN_P8, PIN_CAPABILITY_ALL);
 MicroBitPin P14(MICROBIT_ID_IO_P14, MICROBIT_PIN_P14, PIN_CAPABILITY_ALL);
 
-const Sprite sprite[NUM_SPRITES] =
+Sprite sprite[NUM_SPRITES] =
 {
-	{20.5, 11.5, 6},
-	{18.5, 4.5,  6},
-	{10.0, 4.5,  6},
-	{10.0, 12.5, 6},
-	{3.5,  6.5,  6},
-	{3.5,  20.5, 6},
-	{3.5,  14.5, 6},
-	{14.5, 20.5, 6},
+	{20.5, 11.5, 6, true},
+	{18.5, 4.5,  6, true},
+	{10.0, 4.5,  6, true},
+	{10.0, 12.5, 6, true},
+	{3.5,  6.5,  6, true},
+	{3.5,  20.5, 6, true},
+	{3.5,  14.5, 6, true},
+	{14.5, 20.5, 6, true},
 
-	{18.5, 10.5, 5},
-	{18.5, 11.5, 5},
-	{18.5, 12.5, 5},
+	{18.5, 10.5, 5, true},
+	{18.5, 11.5, 5, true},
+	{18.5, 12.5, 5, true},
 
-	{21.5, 1.5,  9},
-	{15.5, 1.5,  9},
-	{16.0, 1.8,  9},
-	{16.2, 1.2,  9},
-	{3.5,  2.5,  9},
-	{9.5, 15.5,  9},
-	{10.0, 15.1, 9},
-	{10.5, 15.8, 9},
+	{21.5, 1.5,  9, true},
+	{15.5, 1.5,  9, true},
+	{16.0, 1.8,  9, true},
+	{16.2, 1.2,  9, true},
+	{3.5,  2.5,  9, true},
+	{9.5, 15.5,  9, true},
+	{10.0, 15.1, 9, true},
+	{10.5, 15.8, 9, true},
+
+	{-1, -1, -1, true}
 };
 
 const char worldMap[MAP_WIDTH][MAP_HEIGHT] =
@@ -227,6 +243,7 @@ int partition(int* order, float* dist, int left, int right)
     return (i + 1);
 }
 
+/* Praise Tony Hoare \o/ */
 void quickSort(int* order, float* dist, int left, int right)
 {
     if (left < right) {
@@ -256,7 +273,7 @@ void sortSprites(int* order, float* dist, int amount)
 
 void createTextures()
 {
-	int xorcolor, xcolor;
+	int xorcolor, xcolor, index;
 
 	// Used for texture mapping
 	// Note: colours are represented in 565 R-B-G
@@ -264,27 +281,32 @@ void createTextures()
 		for (int y = 0; y < TEX_HEIGHT; y++) {
 			xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
 			xcolor = x - x * 32 / TEX_HEIGHT;
+			index = TEX_WIDTH * y + x;
 
-			texture[0][TEX_WIDTH * y + x] = (21 * (x != y && x != TEX_WIDTH - y)) << 11;
-			texture[1][TEX_WIDTH * y + x] = xorcolor;
-			texture[2][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)) << 11;
-			texture[3][TEX_WIDTH * y + x] = xcolor << 11;
-			texture[4][TEX_WIDTH * y + x] = 21 + 21*32 + 22*2048;
+			texture[0][index] = (21 * (x != y && x != TEX_WIDTH - y)) << 11;
+			texture[1][index] = xorcolor;
+			texture[2][index] = (31 * (x % 4 && y % 4)) << 11;
+			texture[3][index] = xcolor << 11;
+			texture[4][index] = 21 + 21*32 + 22*2048;
 
 			// Twin Peaks floor pattern
         	if (((y + (x % 8 < 4 ? x : 7 - x)) / 4) % 2 == 0)
-				texture[5][TEX_WIDTH * y + x] = 0; // Black
+				texture[5][index] = 0; // Black
 			else
-				texture[5][TEX_WIDTH * y + x] = 0xFFFF; // White
+				texture[5][index] = 0xFFFF; // White
 
-			texture[6][TEX_WIDTH * y + x] = (0b1010000011001001 * (x % 3 && y % 3));
-			texture[7][TEX_WIDTH * y + x] = xorcolor << 3;
-			texture[8][TEX_WIDTH * y + x] = xcolor << 7;
+			texture[6][index] = (0b1010000011001001 * (x % 3 && y % 3));
+			texture[7][index] = xorcolor << 3;
+			texture[8][index] = xcolor << 7;
 
         	if (((x + (y % 8 < 4 ? y : 7 - y)) / 4) % 2 == 0)
-				texture[9][TEX_WIDTH * y + x] = 0; // Black
+				texture[9][index] = 0; // Black
 			else
-				texture[9][TEX_WIDTH * y + x] = 0b1111100000011111; // Yellow
+				texture[9][index] = 0b1111100000011111; // Yellow
+
+			if (x >= 6 && x <= 10 && y >= 6 && y <= 10) {
+				texture[10][index] = 0b1111100000000000;
+			}
 		}
 	}
 }
@@ -337,12 +359,10 @@ void floorCasting(uint16_t *img_ptr, Player *p, FloorContext *f)
 		f->rowDistance = float(SCREEN_HALF) / (y - SCREEN_HALF);
 
 		// Calculate real world step vector added for each x (parallel to camera plane)
-		// Adding step by step avoids multiplications with a weight in the inner loop
 		f->realFloorStepX = f->rowDistance * f->floorStepX;
 		f->realFloorStepY = f->rowDistance * f->floorStepY;
 
-		// Real world coordinates of the leftmost column.
-		// This will be updated as we step to the right.
+		// Real world coordinates of the leftmost column; updated as we step to the right
 		f->floorX = p->posX + f->rowDistance * f->rayDirX0;
 		f->floorY = p->posY + f->rowDistance * f->rayDirY0;
 
@@ -406,9 +426,8 @@ void performDDA(WallContext *w)
 			w->mapY += w->stepY;
 			w->side = 1;
 		}
-		if (worldMap[w->mapX][w->mapY] > 0) {
+		if (worldMap[w->mapX][w->mapY] > 0)
 			w->hit = 1;	// Wall hit detected
-		}
 	}
 }
 
@@ -533,10 +552,46 @@ void renderSprite(uint16_t *img_ptr, SpriteContext *s)
 	}
 }
 
-void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
+bool checkCollision(float bulletX, float bulletY, float spriteX, float spriteY) {
+    const float COLLISION_THRESHOLD = 2;
+
+    float dx = bulletX - spriteX;
+    float dy = bulletY - spriteY;
+    float distanceSquared = dx * dx + dy * dy;
+
+    return distanceSquared < (COLLISION_THRESHOLD * COLLISION_THRESHOLD);
+}
+
+void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s,
+					BulletContext *b, bool moved)
 {
 	// Inverse camera matrix calculation; used to transform sprite coordinates
 	s->invDet = 1.0 / (p->planeX * p->dirY - p->dirX * p->planeY);
+
+	bool bulletHit = false;
+
+    if (sprite[19].isActive) {
+        float shotSpeed = 0.3;
+        b->shotX += b->shotDirX * shotSpeed;
+        b->shotY += b->shotDirY * shotSpeed;
+        sprite[19] = {b->shotX, b->shotY, 10, true};
+
+        if (worldMap[int(b->shotX)][int(b->shotY)] > 0) {
+            bulletHit = true; // Shot hit a wall
+        } else {
+            // Check collision with other sprites
+            for (int i = 0; i < NUM_SPRITES; i++) {
+                if (sprite[i].isActive && checkCollision(b->shotX, b->shotY, sprite[i].x, sprite[i].y)) {
+                    sprite[i].isActive = false; // Deactivate the sprite
+                    bulletHit = true; // Bullet hit a sprite
+                }
+            }
+        }
+
+        if (bulletHit) {
+            sprite[19].isActive = false;
+        }
+    }
 
 	if (moved) {  // Only sort our sprites if the player has moved
 		for (int i = 0; i < NUM_SPRITES; i++) {
@@ -553,6 +608,7 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
 		// Skip sprite if it its distance to player is greater than threshold
 		if (spriteDistance[i] >= SPRITE_DISTANCE_THRESHOLD) continue;
 		s->currentSprite = sprite[spriteOrder[i]];
+		if (!s->currentSprite.isActive) continue;
 		calculateSpriteProjection(p, s);
 		renderSprite(img_ptr, s);
 	}
@@ -563,7 +619,7 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
  *******************************/
 
 void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
-					WallContext **w, SpriteContext **s)
+					WallContext **w, SpriteContext **s, BulletContext **b)
 {
     *lcd = new Adafruit_ST7735(LCD_PIN_CS, LCD_PIN_DC, LCD_PIN_RST,
 							LCD_PIN_MOSI, LCD_PIN_MISO, LCD_PIN_SCLK);
@@ -573,6 +629,7 @@ void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
 	*f = new FloorContext;
 	*w = new WallContext;
 	*s = new SpriteContext;
+	*b = new BulletContext;
 
 	// Initial starting positions
 	(*p)->posX = INITIAL_POSX;
@@ -606,12 +663,8 @@ void checkPlayerPosition(Player *p, bool *moved)
 			p->posY += p->dirY * p->moveSpeed;
 		*moved = true;
 	}
-	else if (P8.getDigitalValue()) {	// Move backwards
-		if (!worldMap[int(p->posX - p->dirX * p->moveSpeed)][int(p->posY)])
-			p->posX -= p->dirX * p->moveSpeed;
-		if (!worldMap[int(p->posX)][int(p->posY - p->dirY * p->moveSpeed)])
-			p->posY -= p->dirY * p->moveSpeed;
-		*moved = true;
+	else if (P8.getDigitalValue() && !sprite[19].isActive) {	// Pew pew
+		beganAnimation = true;
 	}
 }
 
@@ -679,8 +732,9 @@ int main()
 	FloorContext *f;
 	WallContext *w;
 	SpriteContext *s;
+	BulletContext *b;
 
-	initRaycaster(&lcd, &p, &f, &w, &s);
+	initRaycaster(&lcd, &p, &f, &w, &s, &b);
 
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
@@ -690,7 +744,7 @@ int main()
 		floorCasting(img_ptr, p, f);
 		wallCasting(img_ptr, p, w);
 		img_ptr = (uint16_t *) &img[0];
-		spriteCasting(img_ptr, p, s, moved);
+		spriteCasting(img_ptr, p, s, b, moved);
 
 		// Send image buffer to the screen
 		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
@@ -704,5 +758,15 @@ int main()
 
 		updateMovement(p, &moved);
 		normaliseVector(p);
+
+		if (beganAnimation) {
+			b->shotX = p->posX;
+			b->shotY = p->posY;
+			b->shotDirX = p->dirX;
+			b->shotDirY = p->dirY;
+
+			sprite[19] = {b->shotX, b->shotY, 10, true};
+			beganAnimation = false;
+		}
 	}
 }
