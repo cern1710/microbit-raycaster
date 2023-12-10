@@ -58,8 +58,9 @@
  */
 #define CAMERA_PLANE_HALF_LENGTH	(tan((FOV_RADIANS) / 2.0))
 
-#define BULLET_COLLISION_THRESHOLD	0.25
 #define BULLET_SPEED	0.1
+#define BULLET_TEXTURE	10
+#define BULLET_COLLISION_THRESHOLD	0.25
 
 struct Sprite {
 	float x;
@@ -563,10 +564,9 @@ bool checkBulletSpriteCollision(BulletContext *b, Sprite s)
 void checkBulletCollision(BulletContext *b)
 {
     if (sprite[0].isActive) {
-        float shotSpeed = 0.12;
-        b->shotX += b->shotDirX * shotSpeed;
-        b->shotY += b->shotDirY * shotSpeed;
-        sprite[0] = {b->shotX, b->shotY, 10, true};
+        b->shotX += b->shotDirX * BULLET_SPEED;
+        b->shotY += b->shotDirY * BULLET_SPEED;
+        sprite[0] = {b->shotX, b->shotY, BULLET_TEXTURE, true};
 
         if (worldMap[int(b->shotX)][int(b->shotY)] > 0) {
             sprite[0].isActive = false;
@@ -617,7 +617,7 @@ void bulletAnimation(Player *p, BulletContext *b)
 		b->shotDirX = p->dirX;
 		b->shotDirY = p->dirY;
 
-		sprite[0] = {b->shotX, b->shotY, 10, true};
+		sprite[0] = {b->shotX, b->shotY, BULLET_TEXTURE, true};
 		beginAnimation = false;
 	}
 }
