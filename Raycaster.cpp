@@ -45,8 +45,8 @@
 #define INITIAL_PLANEX	0
 #define INITIAL_PLANEY	0.66
 
-#define MOV_SPEED_MULTIPLIER	4.0
-#define ROT_SPEED_MULTIPLIER	2.0
+#define MOV_SPEED_MULTIPLIER	5.0
+#define ROT_SPEED_MULTIPLIER	3.0
 
 #define FOV					65
 #define CAMERA_PLANE_LENGTH	(tan((FOV * PI / 180) / 2.0))
@@ -162,6 +162,9 @@ float zBuffer[SCREEN_HEIGHT];	// Used to handle sprite-wall occlusion
 float spriteDistance[NUM_SPRITES];
 int spriteOrder[NUM_SPRITES];
 uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
+
+MicroBitPin P8(MICROBIT_ID_IO_P8, MICROBIT_PIN_P8, PIN_CAPABILITY_ALL);
+MicroBitPin P14(MICROBIT_ID_IO_P14, MICROBIT_PIN_P14, PIN_CAPABILITY_ALL);
 
 const Sprite sprite[NUM_SPRITES] =
 {
@@ -529,37 +532,6 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
 	}
 }
 
-void checkMovement(Player *p, bool *moved)
-{
-	float oldDirX, oldPlaneX;
-
-	*moved = false;
-	if (uBit.buttonAB.isPressed()) {	// Move forward
-		if (worldMap[int(p->posX + p->dirX * p->moveSpeed)][int(p->posY)] == false)
-			p->posX += p->dirX * p->moveSpeed;
-		if (worldMap[int(p->posX)][int(p->posY + p->dirY * p->moveSpeed)] == false)
-			p->posY += p->dirY * p->moveSpeed;
-		*moved = true;
-	}
-	// Both camera direction and camera planes must be rotated
-	if (uBit.buttonA.isPressed()) {  // Turn left
-		oldDirX = p->dirX;
-		oldPlaneX = p->planeX;
-		p->dirX = p->dirX * cos(p->rotSpeed) - p->dirY * sin(p->rotSpeed);
-		p->dirY = oldDirX * sin(p->rotSpeed) + p->dirY * cos(p->rotSpeed);
-		p->planeX = p->planeX * cos(p->rotSpeed) - p->planeY * sin(p->rotSpeed);
-		p->planeY = oldPlaneX * sin(p->rotSpeed) + p->planeY * cos(p->rotSpeed);
-	}
-	else if (uBit.buttonB.isPressed()) {  // Turn right
-		oldDirX = p->dirX;
-		oldPlaneX = p->planeX;
-		p->dirX = p->dirX * cos(-p->rotSpeed) - p->dirY * sin(-p->rotSpeed);
-		p->dirY = oldDirX * sin(-p->rotSpeed) + p->dirY * cos(-p->rotSpeed);
-		p->planeX = p->planeX * cos(-p->rotSpeed) - p->planeY * sin(-p->rotSpeed);
-		p->planeY = oldPlaneX * sin(-p->rotSpeed) + p->planeY * cos(-p->rotSpeed);
-	}
-}
-
 void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
 					WallContext **w, SpriteContext **s)
 {
@@ -610,6 +582,45 @@ void normaliseVector(Player *p)
         p->dirX /= dirMag;
         p->dirY /= dirMag;
     }
+}
+
+void checkMovement(Player *p, bool *moved)
+{
+	float oldDirX, oldPlaneX;
+
+	*moved = false;
+	if (P14.getDigitalValue()) {	// Move forward
+		if (!worldMap[int(p->posX + p->dirX * p->moveSpeed)][int(p->posY)])
+			p->posX += p->dirX * p->moveSpeed;
+		if (!worldMap[int(p->posX)][int(p->posY + p->dirY * p->moveSpeed)])
+			p->posY += p->dirY * p->moveSpeed;
+		*moved = true;
+	}
+	else if (P8.getDigitalValue()) {	// Move backwards
+		if (!worldMap[int(p->posX - p->dirX * p->moveSpeed)][int(p->posY)])
+			p->posX -= p->dirX * p->moveSpeed;
+		if (!worldMap[int(p->posX)][int(p->posY - p->dirY * p->moveSpeed)])
+			p->posY -= p->dirY * p->moveSpeed;
+		*moved = true;
+	}
+
+	// Both camera direction and camera planes must be rotated
+	if (uBit.buttonA.isPressed()) {  // Turn left
+		oldDirX = p->dirX;
+		oldPlaneX = p->planeX;
+		p->dirX = p->dirX * cos(p->rotSpeed) - p->dirY * sin(p->rotSpeed);
+		p->dirY = oldDirX * sin(p->rotSpeed) + p->dirY * cos(p->rotSpeed);
+		p->planeX = p->planeX * cos(p->rotSpeed) - p->planeY * sin(p->rotSpeed);
+		p->planeY = oldPlaneX * sin(p->rotSpeed) + p->planeY * cos(p->rotSpeed);
+	}
+	else if (uBit.buttonB.isPressed()) {  // Turn right
+		oldDirX = p->dirX;
+		oldPlaneX = p->planeX;
+		p->dirX = p->dirX * cos(-p->rotSpeed) - p->dirY * sin(-p->rotSpeed);
+		p->dirY = oldDirX * sin(-p->rotSpeed) + p->dirY * cos(-p->rotSpeed);
+		p->planeX = p->planeX * cos(-p->rotSpeed) - p->planeY * sin(-p->rotSpeed);
+		p->planeY = oldPlaneX * sin(-p->rotSpeed) + p->planeY * cos(-p->rotSpeed);
+	}
 }
 
 int main()
