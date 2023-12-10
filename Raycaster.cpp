@@ -529,37 +529,18 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
 	}
 }
 
-#define MMIO32(addr)    (*(volatile uint32_t *)(addr))
-
-#define GPIO_EVENT_DETECT   1
-#define GPIO_EVENT_CLEAR    0
-
-/* GPIOTE configuration offsets */
-#define P14   1
-#define EVENT_MODE      1
-#define PSEL_13         (P14 << 8)
-#define FALLING_EDGE    (2 << 16)
-
-/* GPIOTE addresses: base (0x40000600) + offset */
-#define GPIOTE_IN       0x40006100
-#define GPIOTE_CONFIG   0x40006510
-
-void checkMovement(Player *p, bool *moved, int *current_state, int *last_state)
+void checkMovement(Player *p, bool *moved)
 {
 	float oldDirX, oldPlaneX;
-	*current_state = MMIO32(GPIOTE_IN);
 
 	*moved = false;
-	if (*current_state == GPIO_EVENT_DETECT &&
-                *last_state == GPIO_EVENT_CLEAR) {	// Move forward
+	if (uBit.buttonAB.isPressed()) {	// Move forward
 		if (worldMap[int(p->posX + p->dirX * p->moveSpeed)][int(p->posY)] == false)
 			p->posX += p->dirX * p->moveSpeed;
 		if (worldMap[int(p->posX)][int(p->posY + p->dirY * p->moveSpeed)] == false)
 			p->posY += p->dirY * p->moveSpeed;
 		*moved = true;
-		MMIO32(GPIOTE_IN) = GPIO_EVENT_CLEAR;
 	}
-	*last_state = *current_state;
 	// Both camera direction and camera planes must be rotated
 	if (uBit.buttonA.isPressed()) {  // Turn left
 		oldDirX = p->dirX;
@@ -646,10 +627,7 @@ int main()
 	SpriteContext *s;
 
 	initRaycaster(&lcd, &p, &f, &w, &s);
-	int current_state = 0, last_state = 0;
 
-	MMIO32(GPIOTE_CONFIG) = EVENT_MODE | PSEL_13 | FALLING_EDGE;
-	int count = 0;
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
 
@@ -669,11 +647,8 @@ int main()
 
 		p->moveSpeed = frameTime * MOV_SPEED_MULTIPLIER; // Squares/second
 		p->rotSpeed = frameTime * ROT_SPEED_MULTIPLIER;  // Radians/second
-		if (count == 1) {
-			checkMovement(p, &moved, &current_state, &last_state);
-			count = 0;
-		}
+
+		checkMovement(p, &moved);
 		normaliseVector(p);
-		count++;
 	}
 }
