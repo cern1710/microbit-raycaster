@@ -1,7 +1,7 @@
 #include "MicroBit.h"
 #include "Adafruit_ST7735.h"
 
-// Define the MICROBIT EDGE CONNECTOR pins where the display is connected...
+// Microbit edge connector pins where the display is connected
 #define LCD_PIN_CS      2
 #define LCD_PIN_DC      1
 #define LCD_PIN_RST     0
@@ -18,16 +18,18 @@
 #define MAP_WIDTH   	24
 #define MAP_HEIGHT  	24
 
+// Note: We invert all usage of width and height
 #define SCREEN_WIDTH    128
 #define SCREEN_HEIGHT   160
 #define SCREEN_HALF		((SCREEN_WIDTH) / 2)
 
-#define FLOOR_TEXTURE		5
-#define CEILING_TEXTURE		2
-#define DISTANCE_THRESHOLD 	10
+#define CEILING_TEXTURE				2
+#define FLOOR_TEXTURE				5
+#define FLOOR_DISTANCE_THRESHOLD 	10
 
 #define NUM_TEXTURES	10
 #define NUM_SPRITES		19
+#define SPRITE_DISTANCE_THRESHOLD	100	// (10^2; we don't take sqrt for sprite distance)
 
 #define COLOR_MASK	0xEFBB
 #define EMPTY_MASK	0xFFFF
@@ -43,11 +45,18 @@
 #define INITIAL_PLANEX	0
 #define INITIAL_PLANEY	0.66
 
-#define MOV_SPEED_MULTIPLIER	5.0
+#define MOV_SPEED_MULTIPLIER	4.0
 #define ROT_SPEED_MULTIPLIER	3.0
 
-#define FOV					65
-#define CAMERA_PLANE_LENGTH	(tan((FOV * PI / 180) / 2.0))
+#define FOV				65
+#define FOV_RADIANS		((FOV) * PI / 180)
+
+/**
+ * Distance from center of camera's view to edge of camera plane along its width
+ *
+ * Determines how objects in the 3D space will be projected onto the 2D screen
+ */
+#define CAMERA_PLANE_HALF_LENGTH	(tan((FOV_RADIANS) / 2.0))
 
 struct Sprite {
 	float x;
@@ -127,6 +136,40 @@ struct SpriteContext {
 	int spriteScreenX;
 };
 
+float zBuffer[SCREEN_HEIGHT];	// Used to handle sprite-wall occlusion
+float spriteDistance[NUM_SPRITES];
+int spriteOrder[NUM_SPRITES];
+uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
+
+MicroBit uBit;
+MicroBitPin P8(MICROBIT_ID_IO_P8, MICROBIT_PIN_P8, PIN_CAPABILITY_ALL);
+MicroBitPin P14(MICROBIT_ID_IO_P14, MICROBIT_PIN_P14, PIN_CAPABILITY_ALL);
+
+const Sprite sprite[NUM_SPRITES] =
+{
+	{20.5, 11.5, 6},
+	{18.5, 4.5,  6},
+	{10.0, 4.5,  6},
+	{10.0, 12.5, 6},
+	{3.5,  6.5,  6},
+	{3.5,  20.5, 6},
+	{3.5,  14.5, 6},
+	{14.5, 20.5, 6},
+
+	{18.5, 10.5, 5},
+	{18.5, 11.5, 5},
+	{18.5, 12.5, 5},
+
+	{21.5, 1.5,  9},
+	{15.5, 1.5,  9},
+	{16.0, 1.8,  9},
+	{16.2, 1.2,  9},
+	{3.5,  2.5,  9},
+	{9.5, 15.5,  9},
+	{10.0, 15.1, 9},
+	{10.5, 15.8, 9},
+};
+
 const char worldMap[MAP_WIDTH][MAP_HEIGHT] =
 {
   {8,8,8,8,8,8,8,8,8,8,8,4,4,6,4,4,6,4,6,4,4,4,6,4},
@@ -155,39 +198,9 @@ const char worldMap[MAP_WIDTH][MAP_HEIGHT] =
   {2,2,2,2,1,2,2,2,2,2,2,1,2,2,2,5,5,5,5,5,5,5,5,5}
 };
 
-MicroBit uBit;
-float zBuffer[SCREEN_HEIGHT];	// Used to handle sprite-wall occlusion
-float spriteDistance[NUM_SPRITES];
-int spriteOrder[NUM_SPRITES];
-uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
-
-MicroBitPin P8(MICROBIT_ID_IO_P8, MICROBIT_PIN_P8, PIN_CAPABILITY_ALL);
-MicroBitPin P14(MICROBIT_ID_IO_P14, MICROBIT_PIN_P14, PIN_CAPABILITY_ALL);
-
-const Sprite sprite[NUM_SPRITES] =
-{
-	{20.5, 11.5, 6},
-	{18.5, 4.5,  6},
-	{10.0, 4.5,  6},
-	{10.0, 12.5, 6},
-	{3.5,  6.5,  6},
-	{3.5,  20.5, 6},
-	{3.5,  14.5, 6},
-	{14.5, 20.5, 6},
-
-	{18.5, 10.5, 5},
-	{18.5, 11.5, 5},
-	{18.5, 12.5, 5},
-
-	{21.5, 1.5,  9},
-	{15.5, 1.5,  9},
-	{16.0, 1.8,  9},
-	{16.2, 1.2,  9},
-	{3.5,  2.5,  9},
-	{9.5, 15.5,  9},
-	{10.0, 15.1, 9},
-	{10.5, 15.8, 9},
-};
+/*******************************
+ * Sprite helper functions
+ *******************************/
 
 template <typename T>
 void swap(T& a, T& b)
@@ -237,16 +250,16 @@ void sortSprites(int* order, float* dist, int amount)
     }
 }
 
-/**
- * Creates random textures for sprites, walls and ceilings.
- *
- * Note: Colors are represented in 565 R-B-G.
- */
+/*******************************
+ * Create textures
+ *******************************/
+
 void createTextures()
 {
 	int xorcolor, xcolor;
 
 	// Used for texture mapping
+	// Note: colours are represented in 565 R-B-G
 	for (int x = 0; x < TEX_WIDTH; x++) {
 		for (int y = 0; y < TEX_HEIGHT; y++) {
 			xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
@@ -275,6 +288,10 @@ void createTextures()
 		}
 	}
 }
+
+/*******************************
+ * Floor casting
+ *******************************/
 
 /* Linear interpolation for texture mapping onto 3D environment */
 void linearInterpolation(uint16_t *img_ptr, FloorContext *f, int current_y)
@@ -333,6 +350,10 @@ void floorCasting(uint16_t *img_ptr, Player *p, FloorContext *f)
 		linearInterpolation(img_ptr, f, y);
 	}
 }
+
+/*******************************
+ * Wall casting
+ *******************************/
 
 /* Calculates where to cast ray based on player position and direction */
 void calculateRay(Player *p, WallContext *w)
@@ -422,7 +443,7 @@ void renderWallTexture(uint16_t *img_ptr, Player *p, WallContext *w)
 	w->step = 1.0 * TEX_HEIGHT / w->lineHeight;
 	w->texPos = (w->drawStart - SCREEN_HALF + w->lineHeight / 2) * w->step;
 
-	if (w->perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
+	if (w->perpWallDist < FLOOR_DISTANCE_THRESHOLD) { // Render wall normally for closer walls
 		w->skipStep = 1;
 	} else { // Render wall with less detail for distant walls
 		w->skipStep = LARGE_STEP;	// Take a larger step for distant walls
@@ -454,6 +475,10 @@ void wallCasting(uint16_t *img_ptr, Player *p, WallContext *w)
 		img_ptr += SCREEN_WIDTH;	// Update image pointer
 	}
 }
+
+/*******************************
+ * Sprite casting
+ *******************************/
 
 /* Convert world -> camera coords of sprites, then projects them on the 2D plane */
 void calculateSpriteProjection(Player *p, SpriteContext *s)
@@ -493,15 +518,16 @@ void renderSprite(uint16_t *img_ptr, SpriteContext *s)
 		s->texX = (x + (s->spriteHeight / 2 - s->spriteScreenX)) * TEX_WIDTH / s->spriteHeight;
 		// The conditions to draw the sprites are:
 		// 1: It's in front of camera plane
-		// 2: Not obscured by other objects using zBuffer
-		if (s->transformY > 0 && s->transformY < zBuffer[x]) {
+		// 2: Check if not obscured by other objects using zBuffer
+		if (s->transformY > 0 && s->transformY < zBuffer[x] && spriteDistance) {
 			for (int y = s->drawStartY; y < s->drawEndY; y++) {
 				// Use fixed point arithmetic to calculate texY
 				s->texY = (y * 2 + s->spriteHeight - SCREEN_WIDTH) * TEX_WIDTH
 							/ (2 * s->spriteHeight);
 				color = tex_ptr[TEX_WIDTH * s->texY + s->texX];
+				// Only paint if pixel not 0x0000 (our invisible color)
 				if ((color & EMPTY_MASK) != 0)
-					img_ptr[x * SCREEN_WIDTH + y] = color; // Black is the invisible color
+					img_ptr[x * SCREEN_WIDTH + y] = color;
 			}
 		}
 	}
@@ -515,7 +541,7 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
 	if (moved) {  // Only sort our sprites if the player has moved
 		for (int i = 0; i < NUM_SPRITES; i++) {
 			spriteOrder[i] = i;
-			// Avoid sqrt for Euclidean distance calculation of sprites
+			// Euclidean distance unnecessary; square the threshold value instead
 			spriteDistance[i] = (p->posX - sprite[i].x) * (p->posX - sprite[i].x) +
 								(p->posY - sprite[i].y) * (p->posY - sprite[i].y);
 		}
@@ -524,11 +550,17 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
 
 	// Project and draw sprites after sorting
 	for (int i = 0; i < NUM_SPRITES; i++) {
+		// Skip sprite if it its distance to player is greater than threshold
+		if (spriteDistance[i] >= SPRITE_DISTANCE_THRESHOLD) continue;
 		s->currentSprite = sprite[spriteOrder[i]];
 		calculateSpriteProjection(p, s);
 		renderSprite(img_ptr, s);
 	}
 }
+
+/*******************************
+ * Raycaster initialisation
+ *******************************/
 
 void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
 					WallContext **w, SpriteContext **s)
@@ -561,32 +593,12 @@ void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
 	uBit.sleep(STARTUP_TIME_MS);
 }
 
-/**
- * Updates camera plane and direction vectors.
- *
- * Avoids FOV shifting by aligning camera plane to direction vector.
- * Additional step to normalise direction vector to have unit length.
- */
-void normaliseVector(Player *p)
+/*******************************
+ * Update player movement
+ *******************************/
+
+void checkPlayerPosition(Player *p, bool *moved)
 {
-	// The camera plane is perpendicular to the direction vector
-	p->planeX = CAMERA_PLANE_LENGTH * p->dirY;
-	p->planeY = CAMERA_PLANE_LENGTH * -p->dirX;
-
-	// Direction magnitude based on Euclidean distance
-	// We don't need inverse sqrt here
-    float dirMag = sqrt(p->dirX * p->dirX + p->dirY * p->dirY);
-    if (dirMag != 0) {
-        p->dirX /= dirMag;
-        p->dirY /= dirMag;
-    }
-}
-
-void checkMovement(Player *p, bool *moved)
-{
-	float oldDirX, oldPlaneX;
-
-	*moved = false;
 	if (P14.getDigitalValue()) {	// Move forward
 		if (!worldMap[int(p->posX + p->dirX * p->moveSpeed)][int(p->posY)])
 			p->posX += p->dirX * p->moveSpeed;
@@ -601,6 +613,11 @@ void checkMovement(Player *p, bool *moved)
 			p->posY -= p->dirY * p->moveSpeed;
 		*moved = true;
 	}
+}
+
+void checkCameraDirection(Player *p)
+{
+	float oldDirX, oldPlaneX;
 
 	// Both camera direction and camera planes must be rotated
 	if (uBit.buttonA.isPressed()) {  // Turn left
@@ -619,6 +636,34 @@ void checkMovement(Player *p, bool *moved)
 		p->planeX = p->planeX * cos(-p->rotSpeed) - p->planeY * sin(-p->rotSpeed);
 		p->planeY = oldPlaneX * sin(-p->rotSpeed) + p->planeY * cos(-p->rotSpeed);
 	}
+}
+
+void updateMovement(Player *p, bool *moved)
+{
+	*moved = false;
+	checkPlayerPosition(p, moved);
+	checkCameraDirection(p);
+}
+
+/**
+ * Updates camera plane and direction vectors.
+ *
+ * Avoids FOV shifting by aligning camera plane to direction vector.
+ * Additional step to normalise direction vector to have unit length.
+ */
+void normaliseVector(Player *p)
+{
+	// The camera plane is perpendicular to the direction vector
+	p->planeX = CAMERA_PLANE_HALF_LENGTH * p->dirY;
+	p->planeY = CAMERA_PLANE_HALF_LENGTH * -p->dirX;
+
+	// Direction magnitude based on Euclidean distance
+	// We don't need inverse sqrt here
+    float dirMag = sqrt(p->dirX * p->dirX + p->dirY * p->dirY);
+    if (dirMag != 0) {
+        p->dirX /= dirMag;
+        p->dirY /= dirMag;
+    }
 }
 
 int main()
@@ -657,7 +702,7 @@ int main()
 		p->moveSpeed = frameTime * MOV_SPEED_MULTIPLIER; // Squares/second
 		p->rotSpeed = frameTime * ROT_SPEED_MULTIPLIER;  // Radians/second
 
-		checkMovement(p, &moved);
+		updateMovement(p, &moved);
 		normaliseVector(p);
 	}
 }
