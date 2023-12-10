@@ -36,6 +36,15 @@
 
 #define MAX_FLOAT	(1e30f)
 
+#define LARGE_STEP	4
+
+#define INITIAL_POSX	22
+#define INITIAL_POSY	11.5
+#define INITIAL_DIRX	-1
+#define INITIAL_DIRY	0
+#define INITIAL_PLANEX	0
+#define INITIAL_PLANEY	0.66
+
 struct Sprite {
 	float x;
 	float y;
@@ -142,9 +151,10 @@ const char worldMap[MAP_WIDTH][MAP_HEIGHT] =
   {2,2,2,2,1,2,2,2,2,2,2,1,2,2,2,5,5,5,5,5,5,5,5,5}
 };
 
-float zBuffer[SCREEN_HEIGHT];
-int spriteOrder[NUM_SPRITES];
+MicroBit uBit;
+float zBuffer[SCREEN_HEIGHT];	// Used to handle sprite-wall occlusion
 float spriteDistance[NUM_SPRITES];
+int spriteOrder[NUM_SPRITES];
 uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
 
 const Sprite sprite[NUM_SPRITES] =
@@ -171,8 +181,6 @@ const Sprite sprite[NUM_SPRITES] =
 	{10.0, 15.1, 9},
 	{10.5, 15.8, 9},
 };
-
-MicroBit uBit;
 
 template <typename T>
 void swap(T& a, T& b)
@@ -208,7 +216,7 @@ void quickSort(int* order, float* dist, int left, int right)
     }
 }
 
-/* Sort the sprites based on distance */
+/* Sort sprites from farthest to nearest using quicksort */
 void sortSprites(int* order, float* dist, int amount)
 {
 	int start = 0, end = amount - 1;
@@ -222,22 +230,26 @@ void sortSprites(int* order, float* dist, int amount)
     }
 }
 
+/**
+ * Creates random textures for sprites, walls and ceilings.
+ *
+ * Note: Colors are represented in 565 R-B-G.
+ */
 void createTextures()
 {
 	int xorcolor, xcolor;
-	// NOTE: color representation is R-B-G!!!
-	// Used for texture mapping
 
+	// Used for texture mapping
 	for (int x = 0; x < TEX_WIDTH; x++) {
 		for (int y = 0; y < TEX_HEIGHT; y++) {
 			xorcolor = (x * 32 / TEX_WIDTH) ^ (y * 32 / TEX_HEIGHT);
 			xcolor = x - x * 32 / TEX_HEIGHT;
 
-			texture[0][TEX_WIDTH * y + x] = (21 * (x != y && x != TEX_WIDTH - y)) << 11; // Red with black cross
-			texture[1][TEX_WIDTH * y + x] = xorcolor; // XOR green
-			texture[2][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)) << 11; // Red bricks
-			texture[3][TEX_WIDTH * y + x] = xcolor << 11; // Red gradient
-			texture[4][TEX_WIDTH * y + x] = 21 + 21*32 + 22*2048; // Flat grey texture
+			texture[0][TEX_WIDTH * y + x] = (21 * (x != y && x != TEX_WIDTH - y)) << 11;
+			texture[1][TEX_WIDTH * y + x] = xorcolor;
+			texture[2][TEX_WIDTH * y + x] = (31 * (x % 4 && y % 4)) << 11;
+			texture[3][TEX_WIDTH * y + x] = xcolor << 11;
+			texture[4][TEX_WIDTH * y + x] = 21 + 21*32 + 22*2048;
 
 			// Twin Peaks floor pattern
         	if (((y + (x % 8 < 4 ? x : 7 - x)) / 4) % 2 == 0)
@@ -245,7 +257,7 @@ void createTextures()
 			else
 				texture[5][TEX_WIDTH * y + x] = 0xFFFF; // White
 
-			texture[6][TEX_WIDTH * y + x] = (0b1010000011001001 * (x % 3 && y % 3)); // Blue bricks
+			texture[6][TEX_WIDTH * y + x] = (0b1010000011001001 * (x % 3 && y % 3));
 			texture[7][TEX_WIDTH * y + x] = xorcolor << 3;
 			texture[8][TEX_WIDTH * y + x] = xcolor << 7;
 
@@ -257,6 +269,7 @@ void createTextures()
 	}
 }
 
+/* Linear interpolation for texture mapping onto 3D environment */
 void linearInterpolation(uint16_t *img_ptr, FloorContext *f, int current_y)
 {
 	uint16_t color;
@@ -314,11 +327,14 @@ void floorCasting(uint16_t *img_ptr, Player *p, FloorContext *f)
 	}
 }
 
+/* Calculates where to cast ray based on player position and direction */
 void calculateRay(Player *p, WallContext *w)
 {
+	// Compute ray direction based on player's direction w.r.t. camera plane
 	w->rayDirX = p->dirX + (p->planeX * w->cameraX);
 	w->rayDirY = p->dirY + (p->planeY * w->cameraX);
 
+	// Player's position on the map (from floating point to int)
 	w->mapX = int(p->posX);
 	w->mapY = int(p->posY);
 
@@ -326,6 +342,7 @@ void calculateRay(Player *p, WallContext *w)
 	w->deltaX = (w->rayDirX == 0) ? MAX_FLOAT : abs(1 / w->rayDirX);
 	w->deltaY = (w->rayDirY == 0) ? MAX_FLOAT : abs(1 / w->rayDirY);
 
+	// Determines ray step direction and inital distance to first x/y side
 	if (w->rayDirX < 0) {
 		w->stepX = -1;
 		w->sideDistX = (p->posX - w->mapX) * w->deltaX;
@@ -342,6 +359,11 @@ void calculateRay(Player *p, WallContext *w)
 	}
 }
 
+/**
+ * Digital differential analyser (DDA) algorithm
+ *
+ * Used to follow ray through the grid to see where it hits the wall
+ */
 void performDDA(WallContext *w)
 {
 	w->hit = 0;
@@ -356,22 +378,25 @@ void performDDA(WallContext *w)
 			w->mapY += w->stepY;
 			w->side = 1;
 		}
-		if (worldMap[w->mapX][w->mapY] > 0)
-			w->hit = 1;
+		if (worldMap[w->mapX][w->mapY] > 0) {
+			w->hit = 1;	// Wall hit detected
+		}
 	}
 }
 
 void calculateWallStripe(Player *p, WallContext *w)
 {
 	if (w->side == 0) {
-		w->perpWallDist = w->sideDistX - w->deltaX;	// Calculate distance of perpendicular ray
+		// perpWallDist is the distance to the wall along direction of ray
+		// This prevents texture swimming
+		w->perpWallDist = w->sideDistX - w->deltaX;
 		w->wallX = p->posY + w->perpWallDist * w->rayDirY;
 	} else {
 		w->perpWallDist = w->sideDistY - w->deltaY;
 		w->wallX = p->posX + w->perpWallDist * w->rayDirX;
 	}
-	w->lineHeight = (int)(SCREEN_WIDTH / w->perpWallDist); // Calculate height of line to draw on screen
-	w->wallX -= floor(w->wallX); // Where is the wall hit
+	w->lineHeight = (int)(SCREEN_WIDTH / w->perpWallDist); // Height of wall stripe to draw
+	w->wallX -= floor(w->wallX); // Where the wall was hit horizontally
 
 	// Calculate lowest and highest pixel to fill in current stripe
 	w->drawStart = max(0, SCREEN_HALF - (w->lineHeight / 2));
@@ -387,13 +412,13 @@ void renderWallTexture(uint16_t *img_ptr, Player *p, WallContext *w)
 	if ((w->side == 0 && w->rayDirX > 0) || (w->side == 1 && w->rayDirY < 0))
 		w->texX = TEX_WIDTH - w->texX - 1;
 
-	w->step = 1.0 * TEX_HEIGHT / w->lineHeight;
+	w->step = float(TEX_HEIGHT) / w->lineHeight;
 	w->texPos = (w->drawStart - SCREEN_HALF + w->lineHeight / 2) * w->step;
 
 	if (w->perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
 		w->skipStep = 1;
 	} else { // Render wall with less detail for distant walls
-		w->skipStep = 4;
+		w->skipStep = LARGE_STEP;	// Take a larger step for distant walls
 		w->lineHeight /= 2;  // Reduce line height for distant walls
 		w->drawStart += w->lineHeight / 2;
 		w->drawEnd -= w->lineHeight / 2;
@@ -412,34 +437,35 @@ void renderWallTexture(uint16_t *img_ptr, Player *p, WallContext *w)
 void wallCasting(uint16_t *img_ptr, Player *p, WallContext *w)
 {
 	for (int x = 0; x < SCREEN_HEIGHT; x++) {
-		w->cameraX = (2 * x / (float)SCREEN_HEIGHT) - 1;
+		w->cameraX = (2 * x / float(SCREEN_HEIGHT)) - 1;
 		calculateRay(p, w);
 		performDDA(w);
 		calculateWallStripe(p, w);
 		renderWallTexture(img_ptr, p, w);
+
 		zBuffer[x] = w->perpWallDist;	// Update z buffer for current x value on screen
-		img_ptr += SCREEN_WIDTH;		// Update image pointer
+		img_ptr += SCREEN_WIDTH;	// Update image pointer
 	}
 }
 
+/* Convert world -> camera coords of sprites, then projects them on the 2D plane */
 void calculateSpriteProjection(Player *p, SpriteContext *s)
 {
-	// Translate sprite position to relative to camera
+	// Translate sprite position from world to position relative to camera
 	s->spriteX = s->currentSprite.x - p->posX;
 	s->spriteY = s->currentSprite.y - p->posY;
 
-	// This is the depth inside the screen, that what Z is in 3D,
-	// the distance of sprite to player, matching sqrt(spriteDistance[i])
+	// Compute the depth of the sprite relative to the player's position in the
+	// screen space (Z-axis in 3D) using the inverse camera matrix
 	s->transformY = s->invDet * (-p->planeY * s->spriteX + p->planeX * s->spriteY);
-	if (s->transformY <= 0)  // Skip this sprite if it's behind player
-		return;
+	if (s->transformY <= 0)  return; // Skip this sprite if it's behind player
 
 	// Transform sprite with the inverse camera matrix
 	s->transformX = s->invDet * (p->dirY * s->spriteX - p->dirX * s->spriteY);
 	s->spriteScreenX = int((SCREEN_HEIGHT / 2) * (1 + s->transformX / s->transformY));
 
-	// Calculate height of the sprite on screen (lowest and highest pixel to fill current stripe)
-	// Use transformY instead of real distance to prevent fisheye effect
+	// Calculate height of the sprite on screen (lowest and highest pixel to fill in
+	// current stripe). Use transformY instead of real distance to prevent fisheye effect
 	s->spriteHeight = abs(int(SCREEN_WIDTH / (s->transformY)));
 	s->drawStartY = max(0, -s->spriteHeight / 2 + SCREEN_HALF);
 	s->drawEndY = min(SCREEN_WIDTH, s->spriteHeight / 2 + SCREEN_HALF);
@@ -457,16 +483,16 @@ void renderSprite(uint16_t *img_ptr, SpriteContext *s)
 	// Loop through every vertical stripe of the sprite on screen (x)
 	tex_ptr = (uint16_t *) texture[s->currentSprite.texture];
 	for (int x = s->drawStartX; x < s->drawEndX; x++) {
-		s->texX = (x + (s->spriteHeight / 2 - s->spriteScreenX))
-						* TEX_WIDTH / s->spriteHeight;
-		// 1) It's in front of camera plane so you don't see things behind you
-		// 2) ZBuffer, with perpendicular distance
+		s->texX = (x + (s->spriteHeight / 2 - s->spriteScreenX)) * TEX_WIDTH / s->spriteHeight;
+		// The conditions to draw the sprites are:
+		// 1: It's in front of camera plane
+		// 2: Not obscured by other objects using zBuffer
 		if (s->transformY > 0 && s->transformY < zBuffer[x]) {
 			for (int y = s->drawStartY; y < s->drawEndY; y++) {
 				// Use fixed point arithmetic to calculate texY
-				s->texY = TEX_WIDTH * (16 * (y * 2 +
-							s->spriteHeight - SCREEN_WIDTH)) / (32 * s->spriteHeight);
-				color = tex_ptr[TEX_WIDTH * s->texY + s->texX]; // Get current color from texture
+				s->texY = (y * 2 + s->spriteHeight - SCREEN_WIDTH) * TEX_WIDTH
+							/ (2 * s->spriteHeight);
+				color = tex_ptr[TEX_WIDTH * s->texY + s->texX];
 				if ((color & EMPTY_MASK) != 0)
 					img_ptr[x * SCREEN_WIDTH + y] = color; // Black is the invisible color
 			}
@@ -476,12 +502,13 @@ void renderSprite(uint16_t *img_ptr, SpriteContext *s)
 
 void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
 {
-	s->invDet = 1.0 / (p->planeX * p->dirY - p->dirX * p->planeY);	// Required for matmul
+	// Inverse camera matrix calculation; used to transform sprite coordinates
+	s->invDet = 1.0 / (p->planeX * p->dirY - p->dirX * p->planeY);
 
-	if (moved) {	// Only sort the arrays if we move
-		// We don't need to take the Euclidean distance of sprites
+	if (moved) {  // Only sort our sprites if the player has moved
 		for (int i = 0; i < NUM_SPRITES; i++) {
 			spriteOrder[i] = i;
+			// Avoid sqrt for Euclidean distance calculation of sprites
 			spriteDistance[i] = (p->posX - sprite[i].x) * (p->posX - sprite[i].x) +
 								(p->posY - sprite[i].y) * (p->posY - sprite[i].y);
 		}
@@ -496,6 +523,16 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
 	}
 }
 
+#define GPIO_EVENT_DETECT   1
+#define GPIO_EVENT_CLEAR    0
+
+/* GPIOTE configuration offsets */
+#define P14   1
+#define EVENT_MODE      1
+#define PSEL_13         (P14 << 8)
+#define FALLING_EDGE    (2 << 16)
+#define MMIO32(addr)    (*(volatile uint32_t *)(addr))
+
 void checkMovement(Player *p, bool *moved)
 {
 	float oldDirX, oldPlaneX;
@@ -509,7 +546,7 @@ void checkMovement(Player *p, bool *moved)
 		*moved = true;
 	}
 	// Both camera direction and camera planes must be rotated
-	else if (uBit.buttonA.isPressed()) {	// Turn left
+	else if (uBit.buttonA.isPressed()) {  // Turn left
 		oldDirX = p->dirX;
 		oldPlaneX = p->planeX;
 		p->dirX = p->dirX * cos(p->rotSpeed) - p->dirY * sin(p->rotSpeed);
@@ -517,7 +554,7 @@ void checkMovement(Player *p, bool *moved)
 		p->planeX = p->planeX * cos(p->rotSpeed) - p->planeY * sin(p->rotSpeed);
 		p->planeY = oldPlaneX * sin(p->rotSpeed) + p->planeY * cos(p->rotSpeed);
 	}
-	else if (uBit.buttonB.isPressed()) {	// Turn right
+	else if (uBit.buttonB.isPressed()) {  // Turn right
 		oldDirX = p->dirX;
 		oldPlaneX = p->planeX;
 		p->dirX = p->dirX * cos(-p->rotSpeed) - p->dirY * sin(-p->rotSpeed);
@@ -540,14 +577,16 @@ void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
 	*s = new SpriteContext;
 
 	// Initial starting positions
-	(*p)->posX = 22;
-	(*p)->posY = 11.5;
+	(*p)->posX = INITIAL_POSX;
+	(*p)->posY = INITIAL_POSY;
+
 	// Initial direction vector
-	(*p)->dirX = -1;
-	(*p)->dirY = 0;
+	(*p)->dirX = INITIAL_DIRX;
+	(*p)->dirY = INITIAL_DIRY;
+
 	// 2D raycaster of camera plane
-	(*p)->planeX = 0;
-	(*p)->planeY = 0.66;
+	(*p)->planeX = INITIAL_PLANEX;
+	(*p)->planeY = INITIAL_PLANEY;
 
 	createTextures();
 
@@ -575,12 +614,14 @@ int main()
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
 
+		// Main raycasting logic: floor -> wall -> sprite
 		img_ptr = (uint16_t *) &img[0];
 		floorCasting(img_ptr, p, f);
 		wallCasting(img_ptr, p, w);
 		img_ptr = (uint16_t *) &img[0];
 		spriteCasting(img_ptr, p, s, moved);
 
+		// Send image buffer to the screen
 		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
 
 		// Tie our movement/rotation speed to framerate
