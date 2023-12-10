@@ -34,7 +34,7 @@
 #define COLOR_MASK	0xEFBB
 #define EMPTY_MASK	0xFFFF
 
-#define MAX_FLOAT	(1e30f)
+#define MAX_FLOAT	(3.402823466e+38F)
 
 #define LARGE_STEP	4
 
@@ -44,6 +44,9 @@
 #define INITIAL_DIRY	0
 #define INITIAL_PLANEX	0
 #define INITIAL_PLANEY	0.66
+
+#define MOV_SPEED_MULTIPLIER	8.0
+#define ROT_SPEED_MULTIPLIER	2.0
 
 struct Sprite {
 	float x;
@@ -409,7 +412,9 @@ void renderWallTexture(uint16_t *img_ptr, Player *p, WallContext *w)
 	uint16_t mask = (w->side == 1) ? COLOR_MASK : EMPTY_MASK;
 
 	w->texX = int(w->wallX * float(TEX_WIDTH));	// X-coordinate of texture
-	if ((w->side == 0 && w->rayDirX > 0) || (w->side == 1 && w->rayDirY < 0))
+	if (w->side == 0 && w->rayDirX > 0)
+		w->texX = TEX_WIDTH - w->texX - 1;
+	if (w->side == 1 && w->rayDirY < 0)
 		w->texX = TEX_WIDTH - w->texX - 1;
 
 	w->step = 1.0 * TEX_HEIGHT / w->lineHeight;
@@ -533,17 +538,16 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, bool moved)
 #define FALLING_EDGE    (2 << 16)
 #define MMIO32(addr)    (*(volatile uint32_t *)(addr))
 
-void checkMovement(Player *p, bool *moved)
+bool checkMovement(Player *p)
 {
 	float oldDirX, oldPlaneX;
 
-	*moved = false;
 	if (uBit.buttonAB.isPressed()) {	// Move forward
 		if (worldMap[int(p->posX + p->dirX * p->moveSpeed)][int(p->posY)] == false)
 			p->posX += p->dirX * p->moveSpeed;
 		if (worldMap[int(p->posX)][int(p->posY + p->dirY * p->moveSpeed)] == false)
 			p->posY += p->dirY * p->moveSpeed;
-		*moved = true;
+		return true;
 	}
 	// Both camera direction and camera planes must be rotated
 	else if (uBit.buttonA.isPressed()) {  // Turn left
@@ -553,6 +557,7 @@ void checkMovement(Player *p, bool *moved)
 		p->dirY = oldDirX * sin(p->rotSpeed) + p->dirY * cos(p->rotSpeed);
 		p->planeX = p->planeX * cos(p->rotSpeed) - p->planeY * sin(p->rotSpeed);
 		p->planeY = oldPlaneX * sin(p->rotSpeed) + p->planeY * cos(p->rotSpeed);
+		return false;
 	}
 	else if (uBit.buttonB.isPressed()) {  // Turn right
 		oldDirX = p->dirX;
@@ -561,7 +566,9 @@ void checkMovement(Player *p, bool *moved)
 		p->dirY = oldDirX * sin(-p->rotSpeed) + p->dirY * cos(-p->rotSpeed);
 		p->planeY = oldPlaneX * sin(-p->rotSpeed) + p->planeY * cos(-p->rotSpeed);
 		p->planeX = p->planeX * cos(-p->rotSpeed) - p->planeY * sin(-p->rotSpeed);
+		return false;
 	}
+	return false;
 }
 
 void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
@@ -617,6 +624,7 @@ int main()
 		// Main raycasting logic: floor -> wall -> sprite
 		img_ptr = (uint16_t *) &img[0];
 		floorCasting(img_ptr, p, f);
+		img_ptr = (uint16_t *) &img[0];
 		wallCasting(img_ptr, p, w);
 		img_ptr = (uint16_t *) &img[0];
 		spriteCasting(img_ptr, p, s, moved);
@@ -628,8 +636,8 @@ int main()
 		endTime = system_timer_current_time();
 		frameTime = (endTime - startTime) / 1000.0;
 
-		p->moveSpeed = frameTime * 4.0; // Squares/second
-		p->rotSpeed = frameTime * 2.0;  // Radians/second
-		checkMovement(p, &moved);
+		p->moveSpeed = frameTime * MOV_SPEED_MULTIPLIER; // Squares/second
+		p->rotSpeed = frameTime * ROT_SPEED_MULTIPLIER;  // Radians/second
+		moved = checkMovement(p);
 	}
 }
