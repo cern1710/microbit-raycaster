@@ -412,7 +412,7 @@ void renderWallTexture(uint16_t *img_ptr, Player *p, WallContext *w)
 	if ((w->side == 0 && w->rayDirX > 0) || (w->side == 1 && w->rayDirY < 0))
 		w->texX = TEX_WIDTH - w->texX - 1;
 
-	w->step = float(TEX_HEIGHT) / w->lineHeight;
+	w->step = 1.0 * TEX_HEIGHT / w->lineHeight;
 	w->texPos = (w->drawStart - SCREEN_HALF + w->lineHeight / 2) * w->step;
 
 	if (w->perpWallDist < DISTANCE_THRESHOLD) { // Render wall normally for closer walls
