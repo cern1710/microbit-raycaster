@@ -58,16 +58,14 @@
  */
 #define CAMERA_PLANE_HALF_LENGTH	(tan((FOV_RADIANS) / 2.0))
 
+#define BULLET_COLLISION_THRESHOLD	0.25
+#define BULLET_SPEED	0.1
+
 struct Sprite {
 	float x;
 	float y;
 	int texture;
 	bool isActive;
-
-    // Equality comparison operator
-    bool operator!=(const Sprite& other) const {
-        return x != other.x || y != other.y || texture == other.texture || isActive != other.isActive;
-    }
 };
 
 struct Player {
@@ -149,18 +147,21 @@ struct BulletContext {
     float shotDirY;
 };
 
-bool beganAnimation = false;	// Global state on bullet animation
+bool beginAnimation = false;	// Global state on bullet animation
+bool lastButtonState = false;	// Used for shooting mechanism (P8)
 float zBuffer[SCREEN_HEIGHT];	// Used to handle sprite-wall occlusion
 float spriteDistance[NUM_SPRITES];
 int spriteOrder[NUM_SPRITES];
 uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
 
 MicroBit uBit;
-MicroBitPin P8(MICROBIT_ID_IO_P8, MICROBIT_PIN_P8, PIN_CAPABILITY_ALL);
-MicroBitPin P14(MICROBIT_ID_IO_P14, MICROBIT_PIN_P14, PIN_CAPABILITY_ALL);
+MicroBitPin P8(MICROBIT_ID_IO_P8, MICROBIT_PIN_P8, PIN_CAPABILITY_DIGITAL);
+MicroBitPin P14(MICROBIT_ID_IO_P14, MICROBIT_PIN_P14, PIN_CAPABILITY_DIGITAL);
 
 Sprite sprite[NUM_SPRITES] =
 {
+	{-1, -1, -1, false},	// Bullet sprite
+
 	{20.5, 11.5, 6, true},
 	{18.5, 4.5,  6, true},
 	{10.0, 4.5,  6, true},
@@ -181,9 +182,7 @@ Sprite sprite[NUM_SPRITES] =
 	{3.5,  2.5,  9, true},
 	{9.5, 15.5,  9, true},
 	{10.0, 15.1, 9, true},
-	{10.5, 15.8, 9, true},
-
-	{-1, -1, -1, false}
+	{10.5, 15.8, 9, true}
 };
 
 const char worldMap[MAP_WIDTH][MAP_HEIGHT] =
@@ -552,14 +551,35 @@ void renderSprite(uint16_t *img_ptr, SpriteContext *s)
 	}
 }
 
-bool checkCollision(float bulletX, float bulletY, float spriteX, float spriteY) {
-    const float COLLISION_THRESHOLD = 0.5;
-
-    float dx = bulletX - spriteX;
-    float dy = bulletY - spriteY;
+bool checkBulletSpriteCollision(BulletContext *b, Sprite s)
+{
+    float dx = b->shotX - s.x;
+    float dy = b->shotY - s.y;
     float distanceSquared = dx * dx + dy * dy;
 
-    return distanceSquared < (COLLISION_THRESHOLD * COLLISION_THRESHOLD);
+    return distanceSquared < BULLET_COLLISION_THRESHOLD;
+}
+
+void checkBulletCollision(BulletContext *b)
+{
+    if (sprite[0].isActive) {
+        float shotSpeed = 0.12;
+        b->shotX += b->shotDirX * shotSpeed;
+        b->shotY += b->shotDirY * shotSpeed;
+        sprite[0] = {b->shotX, b->shotY, 10, true};
+
+        if (worldMap[int(b->shotX)][int(b->shotY)] > 0) {
+            sprite[0].isActive = false;
+        } else {
+            // Check collision with other sprites
+            for (int i = 1; i < NUM_SPRITES; i++) {
+                if (sprite[i].isActive && checkBulletSpriteCollision(b, sprite[i])) {
+                    sprite[i].isActive = false; // Deactivate the sprite
+            		sprite[0].isActive = false;
+                }
+            }
+        }
+    }
 }
 
 void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, BulletContext *b)
@@ -567,45 +587,38 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, BulletContext
 	// Inverse camera matrix calculation; used to transform sprite coordinates
 	s->invDet = 1.0 / (p->planeX * p->dirY - p->dirX * p->planeY);
 
-	bool bulletHit = false;
+	checkBulletCollision(b);
 
-    if (sprite[19].isActive) {
-        float shotSpeed = 0.3;
-        b->shotX += b->shotDirX * shotSpeed;
-        b->shotY += b->shotDirY * shotSpeed;
-        sprite[19] = {b->shotX, b->shotY, 10, true};
-
-        if (worldMap[int(b->shotX)][int(b->shotY)] > 0) {
-            bulletHit = true; // Shot hit a wall
-        } else {
-            // Check collision with other sprites
-            for (int i = 0; i < NUM_SPRITES - 1; i++) {
-                if (sprite[i].isActive && checkCollision(b->shotX, b->shotY, sprite[i].x, sprite[i].y)) {
-                    sprite[i].isActive = false; // Deactivate the sprite
-                    bulletHit = true; // Bullet hit a sprite
-                }
-            }
-        }
-        if (bulletHit)
-            sprite[19].isActive = false;
-    }
-
-		for (int i = 0; i < NUM_SPRITES; i++) {
-			spriteOrder[i] = i;
-			// Euclidean distance unnecessary; square the threshold value instead
-			spriteDistance[i] = (p->posX - sprite[i].x) * (p->posX - sprite[i].x) +
-								(p->posY - sprite[i].y) * (p->posY - sprite[i].y);
-		}
-		sortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
+	for (int i = 0; i < NUM_SPRITES; i++) {
+		spriteOrder[i] = i;
+		// Euclidean distance unnecessary; square the threshold value instead
+		spriteDistance[i] = (p->posX - sprite[i].x) * (p->posX - sprite[i].x) +
+							(p->posY - sprite[i].y) * (p->posY - sprite[i].y);
+	}
+	sortSprites(spriteOrder, spriteDistance, NUM_SPRITES);
 
 	// Project and draw sprites after sorting
 	for (int i = 0; i < NUM_SPRITES; i++) {
 		// Skip sprite if it its distance to player is greater than threshold
 		if (spriteDistance[i] >= SPRITE_DISTANCE_THRESHOLD) continue;
 		s->currentSprite = sprite[spriteOrder[i]];
+		// Skip sprite if it's not active (i.e. collided with a bullet)
 		if (!s->currentSprite.isActive) continue;
 		calculateSpriteProjection(p, s);
 		renderSprite(img_ptr, s);
+	}
+}
+
+void bulletAnimation(Player *p, BulletContext *b)
+{
+	if (beginAnimation) {
+		b->shotX = p->posX;
+		b->shotY = p->posY;
+		b->shotDirX = p->dirX;
+		b->shotDirY = p->dirY;
+
+		sprite[0] = {b->shotX, b->shotY, 10, true};
+		beginAnimation = false;
 	}
 }
 
@@ -651,15 +664,17 @@ void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
 
 void checkPlayerPosition(Player *p)
 {
+	bool currentButtonState = P8.getDigitalValue();
+
 	if (P14.getDigitalValue()) {	// Move forward
 		if (!worldMap[int(p->posX + p->dirX * p->moveSpeed)][int(p->posY)])
 			p->posX += p->dirX * p->moveSpeed;
 		if (!worldMap[int(p->posX)][int(p->posY + p->dirY * p->moveSpeed)])
 			p->posY += p->dirY * p->moveSpeed;
 	}
-	if (P8.getDigitalValue() && !sprite[19].isActive) {	// Pew pew
-		beganAnimation = true;
-	}
+	else if (currentButtonState && lastButtonState && !sprite[0].isActive)	// Pew pew
+		beginAnimation = true;
+	lastButtonState = currentButtonState;
 }
 
 void checkCameraDirection(Player *p)
@@ -712,13 +727,40 @@ void normaliseVector(Player *p)
     }
 }
 
-int main()
+void runRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
+					WallContext **w, SpriteContext **s, BulletContext **b)
 {
+	ManagedBuffer img(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(int16_t));
 	uint64_t startTime, endTime;
-	uint16_t *img_ptr;
+	uint16_t *img_ptr = (uint16_t *)&img[0];
 	float frameTime;
 
-	ManagedBuffer img(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(int16_t));
+	while (1) {
+		startTime = system_timer_current_time(); // Time at start of the loop
+
+		// Main raycasting logic: floor -> wall -> sprite
+		floorCasting(img_ptr, *p, *f);
+		wallCasting(img_ptr, *p, *w);
+		spriteCasting(img_ptr, *p, *s, *b);
+
+		// Send image buffer to the screen
+		(*lcd)->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
+
+		// Tie our movement/rotation speed to framerate
+		endTime = system_timer_current_time();
+		frameTime = (endTime - startTime) / 1000.0;
+
+		(*p)->moveSpeed = frameTime * MOV_SPEED_MULTIPLIER; // Squares/second
+		(*p)->rotSpeed = frameTime * ROT_SPEED_MULTIPLIER;  // Radians/second
+
+		updateMovement(*p);
+		normaliseVector(*p);
+		bulletAnimation(*p, *b);
+	}
+}
+
+int main()
+{
 	Adafruit_ST7735 *lcd;
 	Player *p;
 	FloorContext *f;
@@ -727,38 +769,5 @@ int main()
 	BulletContext *b;
 
 	initRaycaster(&lcd, &p, &f, &w, &s, &b);
-
-	while (1) {
-		startTime = system_timer_current_time(); // Time at start of the loop
-
-		// Main raycasting logic: floor -> wall -> sprite
-		img_ptr = (uint16_t *) &img[0];
-		floorCasting(img_ptr, p, f);
-		wallCasting(img_ptr, p, w);
-		img_ptr = (uint16_t *) &img[0];
-		spriteCasting(img_ptr, p, s, b);
-
-		// Send image buffer to the screen
-		lcd->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
-
-		// Tie our movement/rotation speed to framerate
-		endTime = system_timer_current_time();
-		frameTime = (endTime - startTime) / 1000.0;
-
-		p->moveSpeed = frameTime * MOV_SPEED_MULTIPLIER; // Squares/second
-		p->rotSpeed = frameTime * ROT_SPEED_MULTIPLIER;  // Radians/second
-
-		updateMovement(p);
-		normaliseVector(p);
-
-		if (beganAnimation) {
-			b->shotX = p->posX;
-			b->shotY = p->posY;
-			b->shotDirX = p->dirX;
-			b->shotDirY = p->dirY;
-
-			sprite[19] = {b->shotX, b->shotY, 10, true};
-			beganAnimation = false;
-		}
-	}
+	runRaycaster(&lcd, &p, &f, &w, &s, &b);
 }
