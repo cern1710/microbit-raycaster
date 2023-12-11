@@ -314,7 +314,7 @@ void createTextures()
  *******************************/
 
 /* Linear interpolation for texture mapping onto 3D environment */
-void linearInterpolation(uint16_t *img_ptr, FloorContext *f, int current_y)
+void linearInterpolation(uint16_t *imgPtr, FloorContext *f, int current_y)
 {
 	uint16_t color;
 
@@ -332,16 +332,16 @@ void linearInterpolation(uint16_t *img_ptr, FloorContext *f, int current_y)
 
 		// Inverse ceiling and floor
 		color = texture[CEILING_TEXTURE][TEX_WIDTH * f->texY + f->texX];
-		img_ptr[x * SCREEN_WIDTH + current_y] = color; // Make a bit darker
+		imgPtr[x * SCREEN_WIDTH + current_y] = color; // Make a bit darker
 
 		// Floor (symmetrical, at screenHeight - y - 1 instead of y)
 		color = texture[FLOOR_TEXTURE][TEX_WIDTH * f->texY + f->texX];
-		img_ptr[(x + 1) * SCREEN_WIDTH - (current_y + 1)] = color;
+		imgPtr[(x + 1) * SCREEN_WIDTH - (current_y + 1)] = color;
 	}
 }
 
 /* Horizontal scanline */
-void floorCasting(uint16_t *img_ptr, Player *p, FloorContext *f)
+void floorCasting(uint16_t *imgPtr, Player *p, FloorContext *f)
 {
 	f->rayDirX0 = p->dirX - p->planeX;	// Ray direction for leftmost ray (x = 0)
 	f->rayDirY0 = p->dirY - p->planeY;
@@ -365,7 +365,7 @@ void floorCasting(uint16_t *img_ptr, Player *p, FloorContext *f)
 		f->floorY = p->posY + f->rowDistance * f->rayDirY0;
 
 		// Linear interpolation for texture mapping
-		linearInterpolation(img_ptr, f, y);
+		linearInterpolation(imgPtr, f, y);
 	}
 }
 
@@ -446,7 +446,7 @@ void calculateWallStripe(Player *p, WallContext *w)
 	w->drawEnd = min(SCREEN_WIDTH, SCREEN_HALF + (w->lineHeight / 2));
 }
 
-void renderWallTexture(uint16_t *img_ptr, Player *p, WallContext *w)
+void renderWallTexture(uint16_t *imgPtr, Player *p, WallContext *w)
 {
 	uint16_t *tex_ptr;
 	uint16_t mask = (w->side == 1) ? COLOR_MASK : EMPTY_MASK;
@@ -472,22 +472,22 @@ void renderWallTexture(uint16_t *img_ptr, Player *p, WallContext *w)
 	w->texNum = worldMap[w->mapX][w->mapY] - 1;	// Subtract 1 to use texture 0
 	tex_ptr = (uint16_t *) &texture[w->texNum][w->texX];
 	for (int y = w->drawStart; y < w->drawEnd; y += w->skipStep) {
-		img_ptr[y] = (tex_ptr[TEX_WIDTH * ((int)w->texPos & TEX_MASK)] & mask);
+		imgPtr[y] = (tex_ptr[TEX_WIDTH * ((int)w->texPos & TEX_MASK)] & mask);
 		w->texPos += w->skipStep * w->step;
 	}
 }
 
-void wallCasting(uint16_t *img_ptr, Player *p, WallContext *w)
+void wallCasting(uint16_t *imgPtr, Player *p, WallContext *w)
 {
 	for (int x = 0; x < SCREEN_HEIGHT; x++) {
 		w->cameraX = (2 * x / float(SCREEN_HEIGHT)) - 1;
 		calculateRay(p, w);
 		performDDA(w);
 		calculateWallStripe(p, w);
-		renderWallTexture(img_ptr, p, w);
+		renderWallTexture(imgPtr, p, w);
 
 		ZBuffer[x] = w->perpWallDist;	// Update Z buffer for current x value on screen
-		img_ptr += SCREEN_WIDTH;	// Update image pointer
+		imgPtr += SCREEN_WIDTH;	// Update image pointer
 	}
 }
 
@@ -522,7 +522,7 @@ void calculateSpriteProjection(Player *p, SpriteContext *s)
 	s->drawEndX = min(SCREEN_HEIGHT, s->spriteHeight / 2 + s->spriteScreenX);
 }
 
-void renderSprite(uint16_t *img_ptr, SpriteContext *s)
+void renderSprite(uint16_t *imgPtr, SpriteContext *s)
 {
 	uint16_t color;
 	uint16_t *tex_ptr;
@@ -542,7 +542,7 @@ void renderSprite(uint16_t *img_ptr, SpriteContext *s)
 				color = tex_ptr[TEX_WIDTH * s->texY + s->texX];
 				// Only paint if pixel not 0x0000 (our invisible color)
 				if ((color & EMPTY_MASK) != 0)
-					img_ptr[x * SCREEN_WIDTH + y] = color;
+					imgPtr[x * SCREEN_WIDTH + y] = color;
 			}
 		}
 	}
@@ -578,7 +578,7 @@ void checkBulletCollision(BulletContext *b)
     }
 }
 
-void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, BulletContext *b)
+void spriteCasting(uint16_t *imgPtr, Player *p, SpriteContext *s, BulletContext *b)
 {
 	// Inverse camera matrix calculation; used to transform sprite coordinates
 	s->invDet = 1.0 / (p->planeX * p->dirY - p->dirX * p->planeY);
@@ -604,7 +604,7 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, BulletContext
 
 		// Render sprite otherwise
 		calculateSpriteProjection(p, s);
-		renderSprite(img_ptr, s);
+		renderSprite(imgPtr, s);
 	}
 }
 
@@ -733,16 +733,16 @@ void runRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
 {
 	ManagedBuffer img(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(int16_t));
 	uint64_t startTime, endTime;
-	uint16_t *img_ptr = (uint16_t *)&img[0];
+	uint16_t *imgPtr = (uint16_t *)&img[0];
 	float frameTime;
 
 	while (1) {
 		startTime = system_timer_current_time(); // Time at start of the loop
 
 		// Main raycasting logic: floor -> wall -> sprite
-		floorCasting(img_ptr, *p, *f);
-		wallCasting(img_ptr, *p, *w);
-		spriteCasting(img_ptr, *p, *s, *b);
+		floorCasting(imgPtr, *p, *f);
+		wallCasting(imgPtr, *p, *w);
+		spriteCasting(imgPtr, *p, *s, *b);
 
 		// Send image buffer to the screen
 		(*lcd)->sendData(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, img.getBytes());
