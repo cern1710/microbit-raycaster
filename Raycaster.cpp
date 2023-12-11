@@ -320,12 +320,12 @@ void linearInterpolation(uint16_t *img_ptr, FloorContext *f, int current_y)
 
 	for (int x = 0; x < SCREEN_HEIGHT; x++) {
 		// The cell coord is simply got from the integer parts of floorX and floorY
-		f->cellX = (int)(f->floorX);
-		f->cellY = (int)(f->floorY);
+		f->cellX = (int8_t)(f->floorX);
+		f->cellY = (int8_t)(f->floorY);
 
 		// Get texture coordinate from the fractional part
-		f->texX = (int)(TEX_WIDTH * (f->floorX - f->cellX)) & TEX_MASK;
-		f->texY = (int)(TEX_HEIGHT * (f->floorY - f->cellY)) & TEX_MASK;
+		f->texX = (int8_t)(TEX_WIDTH * (f->floorX - f->cellX)) & TEX_MASK;
+		f->texY = (int8_t)(TEX_HEIGHT * (f->floorY - f->cellY)) & TEX_MASK;
 
 		f->floorX += f->realFloorStepX;
 		f->floorY += f->realFloorStepY;
