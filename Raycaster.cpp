@@ -366,7 +366,8 @@ void reformat_textures()
 
 	for (int i = 0; i < NUM_IMPORTED_TEXTURES; i++) {
 		for (int j = 0; j < TEX_SIZE * 2; j += 2) {
-			current_color = ((original_texture[i][j] << 8) | (original_texture[i][j + 1])) & 0xFFFF;
+			current_color = ((original_texture[i][j] << 8) |
+							(original_texture[i][j + 1])) & 0xFFFF;
 			current_color = reverseBits(current_color);
 			red = current_color >> 11;
 			green = ((current_color >> 5) & 0x003F) >> 1;
