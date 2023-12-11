@@ -268,9 +268,13 @@ void sortSprites(int8_t* order, float* dist, int amount)
     }
 }
 
+/*******************************
+ * Import textures
+ *******************************/
+
 // Texture hex values are imported using https://lvgl.io/tools/imageconverter
 // Manually changed the original black colors to 0x01
-uint8_t original_texture[NUM_IMPORTED_TEXTURES][TEX_SIZE * 2] = {
+int16_t original_texture[NUM_IMPORTED_TEXTURES][TEX_SIZE * 2] = {
 	// Source: Wolfenstein 3D
 	{0xa0, 0x38, 0xa0, 0x38, 0xa0, 0x38, 0x00, 0x28, 0x00, 0x28, 0xa0, 0x38, 0xa0, 0x38, 0x00, 0x28, 0x00, 0x28, 0x00, 0x28, 0x00, 0x28, 0x00, 0x28, 0x00, 0x28, 0x00, 0x28, 0xa0, 0x38, 0x00, 0x28,
 	0x00, 0x28, 0xab, 0x8b, 0xab, 0x8b, 0xa7, 0x6a, 0x42, 0x31, 0x42, 0x31, 0xab, 0x8b, 0xa7, 0x6a, 0xa0, 0x38, 0xab, 0x8b, 0x42, 0x31, 0x42, 0x31, 0xab, 0x8b, 0x42, 0x31, 0xa7, 0x6a, 0xa7, 0x6a,
@@ -344,14 +348,14 @@ uint8_t original_texture[NUM_IMPORTED_TEXTURES][TEX_SIZE * 2] = {
 
 uint16_t reformatted_texture[NUM_IMPORTED_TEXTURES][TEX_SIZE];
 
+// Reverse bits from our imported textures
 uint16_t reverseBits(uint16_t num)
 {
-    int NO_OF_BITS = 16;
     uint16_t reverse_num = 0;
 
-    for (int i = 0; i < NO_OF_BITS; i++)
+    for (int i = 0; i < 16; i++)
         if ((num & (1 << i)))
-            reverse_num |= 1 << ((NO_OF_BITS - 1) - i);
+            reverse_num |= 1 << (15 - i);
     return reverse_num;
 }
 
