@@ -46,7 +46,7 @@
 #define INITIAL_PLANEY	0.66
 
 #define MOV_SPEED_MULTIPLIER	4.0
-#define ROT_SPEED_MULTIPLIER	3.0
+#define ROT_SPEED_MULTIPLIER	2.0
 
 #define FOV				65
 #define FOV_RADIANS		((FOV) * PI / 180)
@@ -58,16 +58,16 @@
  */
 #define CAMERA_PLANE_HALF_LENGTH	(tan((FOV_RADIANS) / 2.0))
 
-#define BULLET_SPEED	0.1
+#define BULLET_SPEED	0.2
 #define BULLET_TEXTURE	10
 #define BULLET_COLLISION_THRESHOLD	0.25
 
 struct Sprite {
 	float x;
 	float y;
-	int texture;
+	int8_t texture;
 	bool isActive;
-};
+}; // 12 bytes
 
 struct Player {
 	float posX;
@@ -78,7 +78,7 @@ struct Player {
 	float planeY;
 	float moveSpeed;
 	float rotSpeed;
-};
+}; // 32 bytes
 
 struct FloorContext {
 	float floorX;
@@ -92,11 +92,11 @@ struct FloorContext {
 	float rayDirX1;
 	float rayDirY0;
 	float rayDirY1;
-	int cellX;
-	int cellY;
-	int texX;
-	int texY;
-};
+	int8_t cellX;
+	int8_t cellY;
+	int8_t texX;
+	int8_t texY;
+}; // 48 bytes
 
 struct WallContext {
 	float cameraX;	// X-coordinate in camera space
@@ -110,19 +110,18 @@ struct WallContext {
 	float wallX;
 	float step;
 	float texPos;
-	int mapX;
-	int mapY;
-	int stepX;
-	int stepY;
-	int side;
-	int texX;
 	int lineHeight;
 	int drawStart;
 	int drawEnd;
-	int texNum;
-	int skipStep;
-	int hit;
-};
+	int8_t mapX;
+	int8_t mapY;
+	int8_t texX;
+	int8_t texNum;
+	int8_t stepX;
+	int8_t stepY;
+	int8_t skipStep;
+	int8_t side;
+}; // 64 bytes
 
 struct SpriteContext {
 	float invDet;
@@ -130,29 +129,29 @@ struct SpriteContext {
 	float spriteY;
 	float transformX;
 	float transformY;
-	Sprite currentSprite;
-	int texX;
-	int texY;
 	int drawStartX;
 	int drawEndX;
 	int drawStartY;
 	int drawEndY;
 	int spriteHeight;
 	int spriteScreenX;
-};
+	Sprite currentSprite;
+	int8_t texX;
+	int8_t texY;
+}; // 56 bytes (or 60 unless compiler is acting weird)
 
 struct BulletContext {
     float shotX;
     float shotY;
     float shotDirX;
     float shotDirY;
-};
+}; // 16 bytes
 
 bool beginAnimation = false;	// Global state on bullet animation
 bool lastButtonState = false;	// Used for shooting mechanism (P8)
-float zBuffer[SCREEN_HEIGHT];	// Used to handle sprite-wall occlusion
+float ZBuffer[SCREEN_HEIGHT];	// Used to handle sprite-wall occlusion
 float spriteDistance[NUM_SPRITES];
-int spriteOrder[NUM_SPRITES];
+int8_t spriteOrder[NUM_SPRITES];
 uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
 
 MicroBit uBit;
@@ -226,10 +225,10 @@ void swap(T& a, T& b)
     b = temp;
 }
 
-int partition(int* order, float* dist, int left, int right)
+int partition(int8_t* order, float* dist, int8_t left, int8_t right)
 {
     float pivot = dist[right];
-    int i = left - 1;
+    int8_t i = left - 1;
 
     for (int j = left; j <= right - 1; j++) {
         if (dist[j] < pivot) {
@@ -244,7 +243,7 @@ int partition(int* order, float* dist, int left, int right)
 }
 
 /* Praise Tony Hoare \o/ */
-void quickSort(int* order, float* dist, int left, int right)
+void quickSort(int8_t* order, float* dist, int8_t left, int8_t right)
 {
     if (left < right) {
         int pi = partition(order, dist, left, right);
@@ -254,9 +253,9 @@ void quickSort(int* order, float* dist, int left, int right)
 }
 
 /* Sort sprites from farthest to nearest using quicksort */
-void sortSprites(int* order, float* dist, int amount)
+void sortSprites(int8_t* order, float* dist, int amount)
 {
-	int start = 0, end = amount - 1;
+	int8_t start = 0, end = amount - 1;
 
 	quickSort(order, dist, 0, amount - 1);
 
@@ -273,7 +272,7 @@ void sortSprites(int* order, float* dist, int amount)
 
 void createTextures()
 {
-	int xorcolor, xcolor, index;
+	uint16_t xorcolor, xcolor, index;
 
 	// Used for texture mapping
 	// Note: colours are represented in 565 R-B-G
@@ -304,7 +303,7 @@ void createTextures()
 			else
 				texture[9][index] = 0b1111100000011111; // Yellow
 
-			if (x >= 6 && x <= 10 && y >= 6 && y <= 10) {
+			if (x >= 6 && x <= 9 && y >= 6 && y <= 9) {
 				texture[10][index] = 0b1111100000000000;
 			}
 		}
@@ -414,8 +413,7 @@ void calculateRay(Player *p, WallContext *w)
  */
 void performDDA(WallContext *w)
 {
-	w->hit = 0;
-	while (w->hit == 0) {
+	while (1) {
 		// Jump to next map square in either x or y direction
 		if (w->sideDistX < w->sideDistY) {
 			w->sideDistX += w->deltaX;
@@ -427,7 +425,7 @@ void performDDA(WallContext *w)
 			w->side = 1;
 		}
 		if (worldMap[w->mapX][w->mapY] > 0)
-			w->hit = 1;	// Wall hit detected
+			return;
 	}
 }
 
@@ -490,7 +488,7 @@ void wallCasting(uint16_t *img_ptr, Player *p, WallContext *w)
 		calculateWallStripe(p, w);
 		renderWallTexture(img_ptr, p, w);
 
-		zBuffer[x] = w->perpWallDist;	// Update z buffer for current x value on screen
+		ZBuffer[x] = w->perpWallDist;	// Update z buffer for current x value on screen
 		img_ptr += SCREEN_WIDTH;	// Update image pointer
 	}
 }
@@ -537,8 +535,8 @@ void renderSprite(uint16_t *img_ptr, SpriteContext *s)
 		s->texX = (x + (s->spriteHeight / 2 - s->spriteScreenX)) * TEX_WIDTH / s->spriteHeight;
 		// The conditions to draw the sprites are:
 		// 1: It's in front of camera plane
-		// 2: Check if not obscured by other objects using zBuffer
-		if (s->transformY > 0 && s->transformY < zBuffer[x] && spriteDistance) {
+		// 2: Check if not obscured by other objects using ZBuffer
+		if (s->transformY > 0 && s->transformY < ZBuffer[x] && spriteDistance) {
 			for (int y = s->drawStartY; y < s->drawEndY; y++) {
 				// Use fixed point arithmetic to calculate texY
 				s->texY = (y * 2 + s->spriteHeight - SCREEN_WIDTH) * TEX_WIDTH
