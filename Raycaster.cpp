@@ -62,12 +62,12 @@
 #define BULLET_TEXTURE	10
 #define BULLET_COLLISION_THRESHOLD	0.25
 
-struct Sprite {
+struct __attribute__((packed)) Sprite {
 	float x;
 	float y;
 	int8_t texture;
 	bool isActive;
-}; // 12 bytes
+}; // 10 bytes
 
 struct Player {
 	float posX;
@@ -135,10 +135,10 @@ struct SpriteContext {
 	int drawEndY;
 	int spriteHeight;
 	int spriteScreenX;
-	Sprite currentSprite;
 	int8_t texX;
 	int8_t texY;
-}; // 56 bytes (or 60 unless compiler is acting weird)
+	Sprite currentSprite;
+}; // 56 bytes
 
 struct BulletContext {
     float shotX;
@@ -146,6 +146,8 @@ struct BulletContext {
     float shotDirX;
     float shotDirY;
 }; // 16 bytes
+
+#pragma pack(4)
 
 bool beginAnimation = false;	// Global state on bullet animation
 bool lastButtonState = false;	// Used for shooting mechanism (P8)
@@ -424,8 +426,7 @@ void performDDA(WallContext *w)
 			w->mapY += w->stepY;
 			w->side = 1;
 		}
-		if (worldMap[w->mapX][w->mapY] > 0)
-			return;
+		if (worldMap[w->mapX][w->mapY] > 0) return;	// Wall was hit
 	}
 }
 
@@ -488,7 +489,7 @@ void wallCasting(uint16_t *img_ptr, Player *p, WallContext *w)
 		calculateWallStripe(p, w);
 		renderWallTexture(img_ptr, p, w);
 
-		ZBuffer[x] = w->perpWallDist;	// Update z buffer for current x value on screen
+		ZBuffer[x] = w->perpWallDist;	// Update Z buffer for current x value on screen
 		img_ptr += SCREEN_WIDTH;	// Update image pointer
 	}
 }
@@ -554,9 +555,8 @@ bool checkBulletSpriteCollision(BulletContext *b, Sprite s)
 {
     float dx = b->shotX - s.x;
     float dy = b->shotY - s.y;
-    float distanceSquared = dx * dx + dy * dy;
 
-    return distanceSquared < BULLET_COLLISION_THRESHOLD;
+    return ((dx * dx) + (dy * dy)) < BULLET_COLLISION_THRESHOLD;
 }
 
 void checkBulletCollision(BulletContext *b)
@@ -574,8 +574,9 @@ void checkBulletCollision(BulletContext *b)
                 if (sprite[i].isActive && checkBulletSpriteCollision(b, sprite[i])) {
                     sprite[i].isActive = false; // Deactivate the sprite
             		sprite[0].isActive = false;
+					return;	// Early exit to avoid multiple collisions (no area damage!!!)
                 }
-            }
+			}
         }
     }
 }
@@ -765,6 +766,13 @@ int main()
 	WallContext *w;
 	SpriteContext *s;
 	BulletContext *b;
+
+	static_assert (sizeof(Sprite) == 10, "Size is not correct");
+	static_assert (sizeof(Player) == 32, "Size is not correct");
+	static_assert (sizeof(FloorContext) == 48, "Size is not correct");
+	static_assert (sizeof(WallContext) == 64, "Size is not correct");
+	static_assert (sizeof(SpriteContext) == 56, "Size is not correct");
+	static_assert (sizeof(BulletContext) == 16, "Size is not correct");
 
 	initRaycaster(&lcd, &p, &f, &w, &s, &b);
 	runRaycaster(&lcd, &p, &f, &w, &s, &b);
