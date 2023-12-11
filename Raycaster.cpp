@@ -31,6 +31,10 @@
 #define NUM_SPRITES		20
 #define SPRITE_DISTANCE_THRESHOLD	100	// (10^2; we don't take sqrt for sprite distance)
 
+#define BULLET_SPEED	0.2
+#define BULLET_TEXTURE	10
+#define BULLET_COLLISION_THRESHOLD	0.25
+
 #define COLOR_MASK	0xEFBB
 #define EMPTY_MASK	0xFFFF
 
@@ -58,16 +62,12 @@
  */
 #define CAMERA_PLANE_HALF_LENGTH	(tan((FOV_RADIANS) / 2.0))
 
-#define BULLET_SPEED	0.2
-#define BULLET_TEXTURE	10
-#define BULLET_COLLISION_THRESHOLD	0.25
-
 struct __attribute__((packed)) Sprite {
 	float x;
 	float y;
 	int8_t texture;
 	bool isActive;
-}; // 10 bytes
+};	// Pack this struct for SpriteContext
 
 struct Player {
 	float posX;
@@ -78,7 +78,7 @@ struct Player {
 	float planeY;
 	float moveSpeed;
 	float rotSpeed;
-}; // 32 bytes
+};
 
 struct FloorContext {
 	float floorX;
@@ -96,7 +96,7 @@ struct FloorContext {
 	int8_t cellY;
 	int8_t texX;
 	int8_t texY;
-}; // 48 bytes
+};
 
 struct WallContext {
 	float cameraX;	// X-coordinate in camera space
@@ -121,7 +121,7 @@ struct WallContext {
 	int8_t stepY;
 	int8_t skipStep;
 	int8_t side;
-}; // 64 bytes
+};
 
 struct SpriteContext {
 	float invDet;
@@ -138,16 +138,14 @@ struct SpriteContext {
 	int8_t texX;
 	int8_t texY;
 	Sprite currentSprite;
-}; // 56 bytes
+};
 
 struct BulletContext {
     float shotX;
     float shotY;
     float shotDirX;
     float shotDirY;
-}; // 16 bytes
-
-#pragma pack(4)
+};
 
 bool beginAnimation = false;	// Global state on bullet animation
 bool lastButtonState = false;	// Used for shooting mechanism (P8)
@@ -219,7 +217,7 @@ const char worldMap[MAP_WIDTH][MAP_HEIGHT] =
  * Sprite helper functions
  *******************************/
 
-template <typename T>
+template <class T>
 void swap(T& a, T& b)
 {
     T temp = a;
@@ -227,7 +225,7 @@ void swap(T& a, T& b)
     b = temp;
 }
 
-int partition(int8_t* order, float* dist, int8_t left, int8_t right)
+int8_t partition(int8_t* order, float* dist, int8_t left, int8_t right)
 {
     float pivot = dist[right];
     int8_t i = left - 1;
@@ -248,7 +246,7 @@ int partition(int8_t* order, float* dist, int8_t left, int8_t right)
 void quickSort(int8_t* order, float* dist, int8_t left, int8_t right)
 {
     if (left < right) {
-        int pi = partition(order, dist, left, right);
+        int8_t pi = partition(order, dist, left, right);
         quickSort(order, dist, left, pi - 1);
         quickSort(order, dist, pi + 1, right);
     }
@@ -276,7 +274,6 @@ void createTextures()
 {
 	uint16_t xorcolor, xcolor, index;
 
-	// Used for texture mapping
 	// Note: colours are represented in 565 R-B-G
 	for (int x = 0; x < TEX_WIDTH; x++) {
 		for (int y = 0; y < TEX_HEIGHT; y++) {
@@ -574,7 +571,7 @@ void checkBulletCollision(BulletContext *b)
                 if (sprite[i].isActive && checkBulletSpriteCollision(b, sprite[i])) {
                     sprite[i].isActive = false; // Deactivate the sprite
             		sprite[0].isActive = false;
-					return;	// Early exit to avoid multiple collisions (no area damage!!!)
+					return;	// Early exit to avoid multiple collisions
                 }
 			}
         }
@@ -600,14 +597,18 @@ void spriteCasting(uint16_t *img_ptr, Player *p, SpriteContext *s, BulletContext
 	for (int i = 0; i < NUM_SPRITES; i++) {
 		// Skip sprite if it its distance to player is greater than threshold
 		if (spriteDistance[i] >= SPRITE_DISTANCE_THRESHOLD) continue;
-		s->currentSprite = sprite[spriteOrder[i]];
+
 		// Skip sprite if it's not active (i.e. collided with a bullet)
+		s->currentSprite = sprite[spriteOrder[i]];
 		if (!s->currentSprite.isActive) continue;
+
+		// Render sprite otherwise
 		calculateSpriteProjection(p, s);
 		renderSprite(img_ptr, s);
 	}
 }
 
+/* Update bullet context with current user position and direction */
 void bulletAnimation(Player *p, BulletContext *b)
 {
 	if (beginAnimation) {
@@ -671,9 +672,10 @@ void checkPlayerPosition(Player *p)
 		if (!worldMap[int(p->posX)][int(p->posY + p->dirY * p->moveSpeed)])
 			p->posY += p->dirY * p->moveSpeed;
 	}
-	else if (currentButtonState && lastButtonState && !sprite[0].isActive)	// Pew pew
+	else if (currentButtonState && lastButtonState && !sprite[0].isActive)	{ // Pew pew
 		beginAnimation = true;
-	lastButtonState = currentButtonState;
+	}
+	lastButtonState = currentButtonState;	// Prevent debouncing
 }
 
 void checkCameraDirection(Player *p)
