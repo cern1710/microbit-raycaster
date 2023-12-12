@@ -54,15 +54,14 @@
 #define MOV_SPEED_MULTIPLIER	4.0
 #define ROT_SPEED_MULTIPLIER	2.0
 
-#define FOV				65
-#define FOV_RADIANS		((FOV) * PI / 180)
+#define FOV_RADIANS(fov)	((fov) * PI / 180)
 
 /**
  * Distance from center of camera's view to edge of camera plane along its width
  *
  * Determines how objects in the 3D space will be projected onto the 2D screen
  */
-#define CAMERA_PLANE_HALF_LENGTH	(tan((FOV_RADIANS) / 2.0))
+#define CAMERA_PLANE_HALF_LENGTH(fov)	(tan(FOV_RADIANS(fov) / 2.0))
 
 struct __attribute__((packed)) Sprite {
 	float x;
@@ -157,6 +156,7 @@ int8_t spriteOrder[NUM_SPRITES];
 uint16_t texture[NUM_TEXTURES][TEX_WIDTH * TEX_HEIGHT];
 
 MicroBit uBit;
+MicroBitPin P4(MICROBIT_ID_IO_P4, MICROBIT_PIN_P4, PIN_CAPABILITY_ANALOG);
 MicroBitPin P8(MICROBIT_ID_IO_P8, MICROBIT_PIN_P8, PIN_CAPABILITY_DIGITAL);
 MicroBitPin P14(MICROBIT_ID_IO_P14, MICROBIT_PIN_P14, PIN_CAPABILITY_DIGITAL);
 
@@ -764,6 +764,7 @@ void initRaycaster(Adafruit_ST7735 **lcd, Player **p, FloorContext **f,
 	// Initialise Microbit
 	uBit.init();
 	uBit.sleep(STARTUP_TIME_MS);
+	uBit.display.disable();
 }
 
 /*******************************
@@ -823,9 +824,10 @@ void updateMovement(Player *p)
  */
 void normaliseVector(Player *p)
 {
+	int analogValue = 50.0 + P4.getAnalogValue() / 51.2;
 	// The camera plane is perpendicular to the direction vector
-	p->planeX = CAMERA_PLANE_HALF_LENGTH * p->dirY;
-	p->planeY = CAMERA_PLANE_HALF_LENGTH * -p->dirX;
+	p->planeX = CAMERA_PLANE_HALF_LENGTH(analogValue) * p->dirY;
+	p->planeY = CAMERA_PLANE_HALF_LENGTH(analogValue) * -p->dirX;
 
 	// Direction magnitude based on Euclidean distance
 	// We don't need inverse sqrt here
