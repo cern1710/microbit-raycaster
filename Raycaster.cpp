@@ -54,6 +54,8 @@
 #define MOV_SPEED_MULTIPLIER	4.0
 #define ROT_SPEED_MULTIPLIER	2.0
 
+#define FOV_LOWER_BOUND			50.0
+#define FOV_UPPER_BOUND_DIVISOR	44.8
 #define FOV_RADIANS(fov)	((fov) * PI / 180)
 
 /**
@@ -100,7 +102,7 @@ struct FloorContext {
 };
 
 struct WallContext {
-	float cameraX;	// X-coordinate in camera space
+	float cameraX;	// x-coordinate in camera space
 	float rayDirX;
 	float rayDirY;
 	float sideDistX;
@@ -824,13 +826,12 @@ void updateMovement(Player *p)
  */
 void normaliseVector(Player *p)
 {
-	int analogValue = 50.0 + P4.getAnalogValue() / 51.2;
+	int16_t analogValue = FOV_LOWER_BOUND + (P4.getAnalogValue() / FOV_UPPER_BOUND_DIVISOR);
 	// The camera plane is perpendicular to the direction vector
 	p->planeX = CAMERA_PLANE_HALF_LENGTH(analogValue) * p->dirY;
 	p->planeY = CAMERA_PLANE_HALF_LENGTH(analogValue) * -p->dirX;
 
 	// Direction magnitude based on Euclidean distance
-	// We don't need inverse sqrt here
     float dirMag = sqrt(p->dirX * p->dirX + p->dirY * p->dirY);
     if (dirMag != 0) {
         p->dirX /= dirMag;
