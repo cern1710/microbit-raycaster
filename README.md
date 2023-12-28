@@ -1,3 +1,11 @@
-# SCC369 - Embedded Systems
+# Microbit Raycaster
 
-This repository holds all the code for SCC369.
+A simple raycaster for the Microbit using the CODAL.
+
+## Features
+
+- Collision detection
+- Shooting
+- Interactive mazes
+- Sprites
+- Texture imports
